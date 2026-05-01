@@ -133,8 +133,9 @@ You only need to define `extensions` for agents that should be restricted.
 If an agent does not set `extensions`, the child session behaves exactly as before and loads all extensions available to that child environment.
 
 When you do set `extensions`, treat it as a comma-separated allowlist of normal `pi -e` extension sources.
-The child session starts with `--no-extensions` and then adds only the listed sources back, plus the internal `subagent-done` helper that this package loads automatically.
-You do **not** need to list `subagent-done` yourself.
+The child session starts with `--no-extensions` and then adds only the listed sources back.
+
+This allowlist is only for user-visible extension sources. The subagent protocol helper is injected separately so child sessions can still finish, ping the parent, and hand off artifacts. Do not list that helper in `extensions`; it is not an agent setting or an installable extension source.
 
 Use local paths for local extensions:
 
@@ -229,7 +230,13 @@ Best for autonomous workers. The child exits when its turn finishes normally.
 
 ### `subagent_done`
 
-Best when the child should explicitly decide when it is done.
+Best for manual-lifecycle agents that should close themselves only after they decide the assigned task is complete.
+
+`subagent_done` is a child-session tool. The child calls it after its final assistant message to close the child session and return control to the parent. That last assistant message becomes the result summary delivered to the caller.
+
+The parent normally does not call `subagent_done`. Parent sessions use `subagent`, `subagent_wait`, `subagent_join`, `subagent_detach`, or `subagent_resume` to manage children. `subagent_done` is the child's side of the lifecycle contract.
+
+`subagent_done` is available only when it is useful. It is hidden for `auto-exit: true` agents because those agents already close after a normal completion. For `auto-exit: false` agents, it is available by default: manual lifecycle means the child does not close automatically after every normal turn, not that only the human can close it. If you want an interactive child that can only be ended by operator/process shutdown, deny this tool with `deny-tools`.
 
 ### `caller_ping`
 
