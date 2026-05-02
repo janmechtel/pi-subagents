@@ -1595,6 +1595,110 @@ describe("subagents/index.ts helpers", () => {
     assert.equal(result.terminate, true);
   });
 
+  it("defers same-turn detached async completion delivery until the next user turn", async () => {
+    const sent: Array<{ message: any; options: any }> = [];
+    const running = {
+      id: "child-deferred-steer",
+      name: "Async child",
+      task: "Start work",
+      mode: "background" as const,
+      executionState: "running" as const,
+      deliveryState: "detached" as const,
+      parentClosePolicy: "terminate" as const,
+      blocking: false,
+      async: true,
+      startTime: Date.now(),
+      sessionFile: "/tmp/child-deferred-steer.jsonl",
+    };
+
+    setRunningSubagentForTest(running as any);
+    const asyncResult = await getLaunchedSubagentResultForTest(running as any) as any;
+    routeDetachedSubagentCompletionForTest(
+      {
+        sendMessage(message: any, options: any) {
+          sent.push({ message, options });
+        },
+      },
+      running as any,
+      {
+        name: running.name,
+        task: running.task,
+        summary: "Async done",
+        sessionFile: running.sessionFile,
+        exitCode: 0,
+        elapsed: 1,
+      },
+    );
+
+    assert.equal(asyncResult.terminate, true);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].options.deliverAs, "nextTurn");
+    assert.equal(getCompletedSubagentResultForTest(running.id)?.deliveredTo, "steer");
+  });
+
+  it("marks a later sync result as terminating after an async launch in the same batch", async () => {
+    const sent: Array<{ message: any; options: any }> = [];
+    const asyncRunning = {
+      id: "child-mixed-async-terminate",
+      name: "Async child",
+      task: "Start work",
+      mode: "background" as const,
+      executionState: "running" as const,
+      deliveryState: "detached" as const,
+      parentClosePolicy: "terminate" as const,
+      blocking: false,
+      async: true,
+      startTime: Date.now(),
+      sessionFile: "/tmp/child-mixed-async-terminate.jsonl",
+    };
+    const syncRunning = {
+      id: "child-mixed-sync-terminate",
+      name: "Sync child",
+      task: "Gate work",
+      mode: "background" as const,
+      executionState: "running" as const,
+      deliveryState: "detached" as const,
+      parentClosePolicy: "terminate" as const,
+      blocking: true,
+      async: false,
+      startTime: Date.now(),
+      sessionFile: "/tmp/child-mixed-sync-terminate.jsonl",
+      completionPromise: Promise.resolve({
+        name: "Sync child",
+        task: "Gate work",
+        summary: "Done",
+        sessionFile: "/tmp/child-mixed-sync-terminate.jsonl",
+        exitCode: 0,
+        elapsed: 1,
+      }),
+    };
+
+    setRunningSubagentForTest(asyncRunning as any);
+    setRunningSubagentForTest(syncRunning as any);
+    const asyncResult = await getLaunchedSubagentResultForTest(asyncRunning as any) as any;
+    routeDetachedSubagentCompletionForTest(
+      {
+        sendMessage(message: any, options: any) {
+          sent.push({ message, options });
+        },
+      },
+      asyncRunning as any,
+      {
+        name: asyncRunning.name,
+        task: asyncRunning.task,
+        summary: "Async done",
+        sessionFile: asyncRunning.sessionFile,
+        exitCode: 0,
+        elapsed: 1,
+      },
+    );
+    const syncResult = await getLaunchedSubagentResultForTest(syncRunning as any) as any;
+    assert.equal(sent.length, 1);
+    assert.equal(asyncResult.terminate, true);
+    assert.equal(syncResult.details.status, "completed");
+    assert.equal(syncResult.terminate, true);
+  });
+
   it("does not mark sync launch results as terminating the current tool batch", async () => {
     const running = {
       id: "child-sync-no-terminate",
@@ -2248,7 +2352,7 @@ describe("subagents/index.ts helpers", () => {
     assert.ok(!JSON.stringify(entries).includes("Use subagent to fork this session"));
   });
 
-  it("returns detached launch metadata and routes completion exactly once via steer", async () => {
+  it("returns detached launch metadata and defers same-batch completion once", async () => {
     const sent: Array<{ message: any; options: any }> = [];
     const running = {
       id: "child-123",
@@ -2292,7 +2396,7 @@ describe("subagents/index.ts helpers", () => {
     );
 
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].options.deliverAs, "steer");
+    assert.equal(sent[0].options.deliverAs, "nextTurn");
     assert.equal(sent[0].message.details.id, running.id);
     assert.equal(sent[0].message.details.deliveryState, "detached");
     assert.equal(sent[0].message.details.parentClosePolicy, "terminate");

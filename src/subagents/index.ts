@@ -1541,6 +1541,9 @@ function deliverCompletedSubagentResultViaSteer(
 		return cached;
 	}
 
+	// A child can finish while the parent is still unwinding the async-launch tool batch.
+	// Delivering as steer then keeps the parent turn alive; queue it for the next user turn instead.
+	const deliverAs = stopAfterCurrentSubagentBatch ? "nextTurn" : "steer";
 	cached.deliveredTo = "steer";
 	const sessionRef = cached.sessionFile
 		? `\n\nSession: ${cached.sessionFile}\nResume: pi --session ${cached.sessionFile}`
@@ -1572,7 +1575,7 @@ function deliverCompletedSubagentResultViaSteer(
 				sessionFile: cached.sessionFile,
 			},
 		},
-		{ triggerTurn: true, deliverAs: "steer" },
+		{ triggerTurn: true, deliverAs },
 	);
 
 	return cached;
