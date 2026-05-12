@@ -18,7 +18,7 @@ import type { RunningSubagent, SubagentParamsInput, SubagentsListToolDetails, Su
 import { asSubagentToolResult, getCoordinatorOnlyTurnPrompt, markSubagentBatchBlocking } from "../runtime/state.ts";
 import { getNoSessionSeedMode } from "../launch/seed-child-session.ts";
 import { isSetTabTitleToolEnabled } from "../agents/titles.ts";
-import { formatTaskPreview, renderSubagentCompletionText } from "./message-renderers.ts";
+import { formatSubagentBatchLines, formatTaskPreview, renderSubagentCompletionText } from "./message-renderers.ts";
 import { getSubagentToolsConfigError } from "./policy.ts";
 
 const SubagentChildParams = Type.Object({
@@ -146,7 +146,8 @@ export function registerSubagentCoreTools(
 				if (error) throw new Error(error);
 				return { child, agentDefs, blocking: resolveSubagentBlocking(child, agentDefs) };
 			});
-			if (prepared.length > 1 && prepared.some((entry) => entry.blocking)) {
+			const hasBlockingChild = prepared.some((entry) => entry.blocking);
+			if (prepared.length > 1 && hasBlockingChild) {
 				markSubagentBatchBlocking();
 			}
 
@@ -163,18 +164,30 @@ export function registerSubagentCoreTools(
 			const texts = results.flatMap((result) => result.content).filter((block) => block.type === "text").map((block) => block.text);
 			return asSubagentToolResult({
 				content: [{ type: "text", text: texts.join("\n\n") }],
-				details: { status: "batch", children: results.map((result) => result.details) },
+				details: {
+					status: hasBlockingChild ? "batch" : "started",
+					children: results.map((result, index) => ({
+						...(result.details as Record<string, unknown>),
+						task: prepared[index]?.child.task,
+						title: prepared[index]?.child.title,
+						agent: prepared[index]?.child.agent,
+						name: (result.details as { name?: string } | undefined)?.name ?? prepared[index]?.child.name,
+					})),
+				},
 			});
 		},
 		renderCall(args, theme, context) {
 			const text = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
 			const children = Array.isArray(args.children) ? args.children : undefined;
 			if (children?.length) {
-				const lines = [`▸ ${theme.fg("toolTitle", theme.bold("Spawn"))} ${theme.fg("accent", theme.bold(`${children.length} agents`))}`];
-				for (const child of children) {
+				const lines = [`▸ ${theme.fg("toolTitle", theme.bold("Spawn"))} ${theme.fg("toolTitle", theme.bold(`${children.length} agents`))}`, ""];
+				children.forEach((child, index) => {
+					if (index > 0) lines.push("");
 					const agent = child.agent ? theme.fg("dim", ` (${child.agent})`) : "";
-					lines.push(`  ${theme.fg("accent", theme.bold(child.name ?? "subagent"))}${agent}`);
-				}
+					lines.push(`${theme.fg("accent", theme.bold(child.name ?? "subagent"))}${agent}`);
+					const taskPreview = formatTaskPreview(child.task, context, theme).replace(/^\n/, "");
+					if (taskPreview) lines.push(taskPreview);
+				});
 				text.setText(lines.join("\n"));
 				return text;
 			}
@@ -185,10 +198,9 @@ export function registerSubagentCoreTools(
 		renderResult(result, options, theme, context) {
 			const details = result.details as { status?: string; children?: unknown[] } | undefined;
 			if (details?.children) {
-				const firstContent = result.content?.[0];
-				const text = firstContent?.type === "text" ? firstContent.text : "";
+				if (details.status !== "batch") return new Text("", 0, 0);
 				const component = context.lastComponent instanceof Text ? context.lastComponent : new Text("", 0, 0);
-				component.setText(`\n${theme.fg("dim", text)}`);
+				component.setText(`\n${formatSubagentBatchLines(result, context.args, options, theme).join("\n")}`);
 				return component;
 			}
 			if (details?.status !== "completed" && details?.status !== "failed" && details?.status !== "cancelled") {

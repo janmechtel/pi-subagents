@@ -9,6 +9,36 @@ import type {
 type ThemeLike = Parameters<Parameters<ExtensionAPI["registerMessageRenderer"]>[1]>[2];
 type RenderOptions = { expanded: boolean };
 
+type BatchChildArgs = {
+	name?: string;
+	agent?: string;
+	task?: string;
+	title?: string;
+};
+
+type SubagentCompletionDetails = SubagentResultMessageDetails & {
+	id?: string;
+	name?: string;
+	status?: string;
+	mode?: "interactive" | "background";
+	deliveryState?: string;
+	blocking?: boolean;
+	async?: boolean;
+	autoExit?: boolean;
+	summary?: string;
+	task?: string;
+	title?: string;
+};
+
+type SubagentBatchDetails = {
+	status?: string;
+	children?: SubagentCompletionDetails[];
+};
+
+type SubagentBatchArgs = {
+	children?: BatchChildArgs[];
+};
+
 function formatElapsedDefault(seconds: number): string {
 	const s = Math.round(seconds);
 	const m = Math.floor(s / 60);
@@ -30,6 +60,18 @@ function stripSessionRef(text: string): string {
 function firstTextContent(result: AgentToolResult<unknown>): string {
 	const first = result.content?.[0];
 	return first?.type === "text" ? first.text : "";
+}
+
+function getChildArg(args: SubagentBatchArgs | undefined, index: number): BatchChildArgs | undefined {
+	return Array.isArray(args?.children) ? args.children[index] : undefined;
+}
+
+function getChildAgent(child: SubagentCompletionDetails, args: SubagentBatchArgs | undefined, index: number): string | undefined {
+	return child.agent ?? getChildArg(args, index)?.agent;
+}
+
+function getChildName(child: SubagentCompletionDetails, args: SubagentBatchArgs | undefined, index: number): string {
+	return child.name ?? getChildArg(args, index)?.name ?? "subagent";
 }
 
 function extractSummary(
@@ -85,24 +127,18 @@ export function formatTaskPreview(
 	return lines.length ? `\n${lines.join("\n")}` : "";
 }
 
-export function formatSubagentCompletionLines(
-	result: AgentToolResult<unknown>,
-	options: RenderOptions,
+function formatSubagentCompletionHeader(
+	details: SubagentCompletionDetails | undefined,
 	theme: ThemeLike,
-	formatElapsed: (elapsed: number) => string = formatElapsedDefault,
-): string[] {
-	const details = result.details as
-		| (SubagentResultMessageDetails & {
-				summary?: string;
-				status?: string;
-				task?: string;
-		  })
-		| undefined;
-	const rawContent = firstTextContent(result);
-	const name = details?.name ?? "subagent";
+	formatElapsed: (elapsed: number) => string,
+	fallbackName = "subagent",
+	fallbackAgent?: string,
+): string {
+	const name = details?.name ?? fallbackName;
 	const exitCode = details?.exitCode ?? 0;
 	const elapsed = details?.elapsed != null ? formatElapsed(details.elapsed) : "?";
-	const agentTag = details?.agent ? theme.fg("dim", ` (${details.agent})`) : "";
+	const agent = details?.agent ?? fallbackAgent;
+	const agentTag = agent ? theme.fg("dim", ` (${agent})`) : "";
 	const status =
 		details?.status === "cancelled"
 			? "cancelled"
@@ -110,8 +146,19 @@ export function formatSubagentCompletionLines(
 				? "completed"
 				: `failed (exit ${exitCode})`;
 	const icon = exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
-	const header = `${icon} ${theme.fg("toolTitle", theme.bold(name))}${agentTag} ${theme.fg("dim", "—")} ${status} ${theme.fg("dim", `(${elapsed})`)}`;
-	const lines = [header];
+	return `${icon} ${theme.fg("toolTitle", theme.bold(name))}${agentTag} ${theme.fg("dim", "—")} ${status} ${theme.fg("dim", `(${elapsed})`)}`;
+}
+
+export function formatSubagentCompletionLines(
+	result: AgentToolResult<unknown>,
+	options: RenderOptions,
+	theme: ThemeLike,
+	formatElapsed: (elapsed: number) => string = formatElapsedDefault,
+): string[] {
+	const details = result.details as SubagentCompletionDetails | undefined;
+	const rawContent = firstTextContent(result);
+	const elapsed = details?.elapsed != null ? formatElapsed(details.elapsed) : "?";
+	const lines = [formatSubagentCompletionHeader(details, theme, formatElapsed)];
 	const summary = extractSummary(rawContent, details, elapsed);
 	appendExpandableLines(lines, summary, options, theme);
 	if (options.expanded && details?.sessionFile) {
@@ -119,6 +166,36 @@ export function formatSubagentCompletionLines(
 		lines.push(theme.fg("dim", `Session: ${details.sessionFile}`));
 		lines.push(theme.fg("dim", `Resume:  pi --session ${details.sessionFile}`));
 	}
+	return lines;
+}
+
+export function formatSubagentBatchLines(
+	result: AgentToolResult<unknown>,
+	args: SubagentBatchArgs | undefined,
+	options: RenderOptions,
+	theme: ThemeLike,
+	formatElapsed: (elapsed: number) => string = formatElapsedDefault,
+): string[] {
+	const details = result.details as SubagentBatchDetails | undefined;
+	const children = Array.isArray(details?.children) ? details.children : [];
+	const lines: string[] = [];
+
+	children.forEach((child, index) => {
+		if (index > 0) lines.push("");
+		const fallbackName = getChildName(child, args, index);
+		const fallbackAgent = getChildAgent(child, args, index);
+		lines.push(formatSubagentCompletionHeader(child, theme, formatElapsed, fallbackName, fallbackAgent));
+
+		const summary = child.summary ?? "";
+		appendExpandableLines(lines, summary, options, theme);
+
+		if (options.expanded && child.sessionFile) {
+			lines.push("");
+			lines.push(theme.fg("dim", `Session: ${child.sessionFile}`));
+			lines.push(theme.fg("dim", `Resume:  pi --session ${child.sessionFile}`));
+		}
+	});
+
 	return lines;
 }
 

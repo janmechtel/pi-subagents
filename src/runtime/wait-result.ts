@@ -25,6 +25,7 @@ function getSubagentWaitPingResult(
 		details: {
 			id: running.id,
 			name: running.name,
+			agent: running.agent,
 			status: "pinged" as const,
 			deliveryState,
 			blocking: running.blocking,
@@ -61,6 +62,7 @@ function getSubagentWaitSuccessResult(cached: CompletedSubagentResult) {
 		details: {
 			id: cached.id,
 			name: cached.name,
+			agent: cached.agent,
 			status: cached.status,
 			mode: cached.mode,
 			deliveryState: "awaited" as const,

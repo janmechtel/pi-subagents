@@ -1,5 +1,6 @@
 import { assert, describe, it } from "../support/index.ts";
 import {
+	formatSubagentBatchLines,
 	formatSubagentCompletionLines,
 	formatTaskPreview,
 } from "../../src/tools/message-renderers.ts";
@@ -35,6 +36,43 @@ describe("subagent message renderers", () => {
 
 		assert.match(preview, /final words/);
 		assert.doesNotMatch(preview, /more chars/);
+	});
+
+	it("renders multi-child subagent batches with response truncation", () => {
+		const lines = formatSubagentBatchLines(
+			{
+				content: [{ type: "text", text: "ignored raw content" }],
+				details: {
+					status: "batch",
+					children: [
+						{
+							name: "magician-anarcho-communism",
+							agent: "magician",
+							status: "completed",
+							exitCode: 0,
+							elapsed: 12,
+							summary: Array.from({ length: 12 }, (_, index) => `result ${index + 1}`).join("\n"),
+						},
+					],
+				},
+			},
+			{
+				children: [
+					{
+						name: "magician-anarcho-communism",
+						agent: "magician",
+						task: Array.from({ length: 11 }, (_, index) => `task ${index + 1}`).join("\n"),
+					},
+				],
+			},
+			{ expanded: false },
+			theme,
+		);
+
+		assert.equal(lines[0], "✓ magician-anarcho-communism (magician) — completed (12s)");
+		assert.deepEqual(lines.slice(1, 11), ["result 1", "result 2", "result 3", "result 4", "result 5", "result 6", "result 7", "result 8", "result 9", "result 10"]);
+		assert.match(lines[11], /\.\.\. \(2 more lines,.*to expand\)/);
+		assert.doesNotMatch(lines.join("\n"), /Task:|Response:|task 1/);
 	});
 
 	it("renders completed subagent tool results with summary and expandable tail", () => {
