@@ -44,6 +44,15 @@ export function seedPreparedSubagentSession(
 	const boundarySystemPrompt = shouldWriteChildContextBoundary(seedMode);
 	const reserveTokens = resolveForkOutputReserveTokens(prepared.agentDefs);
 	if (seedMode) {
+		// Lineage-tracked and forked children require a parent session file.
+		// If there isn't one, throw a clear error instead of crashing downstream.
+		if (!prepared.sessionFile) {
+			throw new Error(
+				`Cannot launch ${seedMode} subagent: no parent session file. ` +
+					`Use session-mode: standalone in the agent frontmatter, ` +
+					`or start pi with a persistent session (--session or --session-dir).`,
+			);
+		}
 		const forkTrimOptions =
 			seedMode === "fork" && ctx.childModelContextWindow
 				? {

@@ -3,13 +3,13 @@ import type {
 	ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 import type { AgentDefaults } from "./agents/definitions.ts";
-import type { SubagentCatalogEntry } from "./agents/catalog-message.ts";
+import type { AgentListEntry } from "./agents/agent-list.ts";
 import {
-	getAmbientCatalogEntries as getAmbientCatalogEntriesFromDefinitions,
-	getSubagentCatalogSignature,
+	getAgentListEntries as getAgentListEntriesFromDefinitions,
+	getAgentListSignature,
 	isAmbientAwarenessDisabled,
-	renderSubagentCatalogReminder,
-} from "./agents/catalog-message.ts";
+	renderAgentListReminder,
+} from "./agents/agent-list.ts";
 import {
 	loadAgentDefaults as loadAgentDefaultsFromDefinitions,
 } from "./agents/definitions.ts";
@@ -87,10 +87,10 @@ export function loadAgentDefaults(
 	);
 }
 
-function getAmbientCatalogEntries(
+function getAgentListEntries(
 	baseCwd = process.cwd(),
-): SubagentCatalogEntry[] {
-	return getAmbientCatalogEntriesFromDefinitions(baseCwd, resolveTaskSessionMode);
+): AgentListEntry[] {
+	return getAgentListEntriesFromDefinitions(baseCwd, resolveTaskSessionMode);
 }
 
 function resolveEffectiveSessionMode(
@@ -114,7 +114,7 @@ let lastAmbientCatalogSignature: string | null = null;
 let pendingAmbientCatalogReminder: {
 	signature: string;
 	content: string;
-	entries: SubagentCatalogEntry[];
+	entries: AgentListEntry[];
 	supersedes?: true;
 } | null = null;
 
@@ -168,8 +168,8 @@ export default function subagentsExtension(pi: ExtensionAPI) {
 			lastAmbientCatalogSignature = null;
 		}
 
-		const entries = getAmbientCatalogEntries(ctx.cwd);
-		const signature = getSubagentCatalogSignature(entries);
+		const entries = getAgentListEntries(ctx.cwd);
+		const signature = getAgentListSignature(entries);
 		if (entries.length === 0) {
 			if (event.reason === "reload") pendingAmbientCatalogReminder = null;
 			lastAmbientCatalogSignature = null;
@@ -183,7 +183,7 @@ export default function subagentsExtension(pi: ExtensionAPI) {
 
 		pendingAmbientCatalogReminder = {
 			signature,
-			content: renderSubagentCatalogReminder(entries),
+			content: renderAgentListReminder(entries),
 			entries,
 			supersedes: event.reason === "reload" ? true : undefined,
 		};

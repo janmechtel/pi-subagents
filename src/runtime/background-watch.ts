@@ -101,6 +101,10 @@ export function watchBackgroundSubagent(
 			const elapsed = Math.floor((Date.now() - running.startTime) / 1000);
 			const exitSignal = consumeSubagentExitSignal(running.sessionFile);
 			const exitCode = exitSignal?.exitCode ?? code ?? 1;
+			const errorMessage =
+				exitSignal?.reason === "error"
+					? exitSignal.errorMessage
+					: undefined;
 			const stderr = running.stderrTail?.trim();
 			const stdout = running.stdoutTail?.trim();
 			let summary = `Background agent exited with code ${exitCode}`;
@@ -130,6 +134,7 @@ export function watchBackgroundSubagent(
 				elapsed,
 				outputTokens: exitSignal?.outputTokens,
 				ping: exitSignal?.ping,
+				errorMessage,
 			});
 		};
 		const onError = (error: Error) => {

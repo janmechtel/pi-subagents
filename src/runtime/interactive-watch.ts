@@ -58,6 +58,8 @@ export async function watchSubagent(
 					: "Sub-agent exited without output";
 		}
 
+		const errorMessage =
+			pollResult.reason === "error" ? pollResult.errorMessage : undefined;
 		const exitSignal =
 			pollResult.outputTokens !== undefined
 				? undefined
@@ -75,6 +77,7 @@ export async function watchSubagent(
 			elapsed,
 			outputTokens: pollResult.outputTokens ?? exitSignal?.outputTokens,
 			ping: pollResult.ping,
+			errorMessage,
 		};
 	} catch (err: unknown) {
 		const errorMessage = err instanceof Error ? err.message : String(err);

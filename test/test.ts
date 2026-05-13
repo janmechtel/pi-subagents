@@ -3,7 +3,7 @@ import "./tools/subagent-done.test.ts";
 import "./tools/message-renderers.test.ts";
 import "./artifacts/storage.test.ts";
 import "./launch/config.test.ts";
-import "./agents/definitions-catalog.test.ts";
+import "./agents/definitions-agent-list.test.ts";
 import "./runtime/launch-results.test.ts";
 import "./runtime/elapsed-format.test.ts";
 import "./agents/ambient-runtime-paths.test.ts";

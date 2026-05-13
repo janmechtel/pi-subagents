@@ -87,9 +87,12 @@ function extractSummary(
 		.replace(`Sub-agent "${name}" completed (exit code ${exitCode}).\n\n`, "")
 		.replace(`Sub-agent "${name}" failed (exit code ${exitCode}).\n\n`, "")
 		.replace(`Sub-agent "${name}" failed (status failed).\n\n`, "")
-		.replace(`Sub-agent "${name}" was cancelled (status cancelled).\n\n`, "");
+		.replace(`Sub-agent "${name}" was cancelled (status cancelled).\n\n`, "")
+		.replace(
+			`Sub-agent "${name}" failed after ${elapsed} (provider/agent error — auto-retry exhausted).\n\n`,
+			"",
+		);
 }
-
 export function appendExpandableLines(
 	lines: string[],
 	body: string,
@@ -135,17 +138,21 @@ function formatSubagentCompletionHeader(
 	fallbackAgent?: string,
 ): string {
 	const name = details?.name ?? fallbackName;
+	const errorMessage = details?.errorMessage;
 	const exitCode = details?.exitCode ?? 0;
 	const elapsed = details?.elapsed != null ? formatElapsed(details.elapsed) : "?";
 	const agent = details?.agent ?? fallbackAgent;
 	const agentTag = agent ? theme.fg("dim", ` (${agent})`) : "";
+	const failed = !!errorMessage || exitCode !== 0;
 	const status =
 		details?.status === "cancelled"
 			? "cancelled"
-			: exitCode === 0
-				? "completed"
-				: `failed (exit ${exitCode})`;
-	const icon = exitCode === 0 ? theme.fg("success", "✓") : theme.fg("error", "✗");
+			: errorMessage
+				? "failed (provider/agent error)"
+				: exitCode === 0
+					? "completed"
+					: `failed (exit ${exitCode})`;
+	const icon = failed ? theme.fg("error", "✗") : theme.fg("success", "✓");
 	return `${icon} ${theme.fg("toolTitle", theme.bold(name))}${agentTag} ${theme.fg("dim", "—")} ${status} ${theme.fg("dim", `(${elapsed})`)}`;
 }
 
@@ -223,10 +230,11 @@ export function registerSubagentMessageRenderers(
 		return {
 			invalidate() {},
 			render(width: number): string[] {
-				const bgFn =
-					(details.exitCode ?? 0) === 0
-						? (text: string) => theme.bg("toolSuccessBg", text)
-						: (text: string) => theme.bg("toolErrorBg", text);
+				const errorMessage = typeof details.errorMessage === "string" ? details.errorMessage : "";
+				const failed = !!errorMessage || (details.exitCode ?? 0) !== 0;
+				const bgFn = failed
+					? (text: string) => theme.bg("toolErrorBg", text)
+					: (text: string) => theme.bg("toolSuccessBg", text);
 				const result = {
 					content: [
 						{

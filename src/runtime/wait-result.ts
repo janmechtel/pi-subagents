@@ -6,6 +6,7 @@ import type {
 	SubagentResult,
 	WaitParams,
 } from "../types.ts";
+import { formatElapsed } from "./wiring.ts";
 import type { WaitRuntime } from "./wait.ts";
 
 function getSubagentWaitPingResult(
@@ -39,26 +40,32 @@ function getSubagentWaitPingResult(
 }
 
 function getSubagentWaitSuccessResult(cached: CompletedSubagentResult) {
-	const verb =
-		cached.status === "completed"
-			? "completed"
-			: cached.status === "cancelled"
-				? "was cancelled"
-				: "failed";
-	const exitText =
-		cached.status === "completed"
-			? `exit code ${cached.exitCode}`
-			: `status ${cached.status}`;
 	const sessionRef = cached.sessionFile
 		? `\n\nSession: ${cached.sessionFile}\nResume: pi --session ${cached.sessionFile}`
 		: "";
+	let text: string;
+	if (cached.errorMessage) {
+		text =
+			`Sub-agent "${cached.name}" failed after ${formatElapsed(cached.elapsed)} ` +
+			`(provider/agent error — auto-retry exhausted).\n\n` +
+			`Error: ${cached.errorMessage}\n\n` +
+			`The subagent did not produce a result. You can retry by spawning a new ` +
+			`subagent or resume the session with subagent_resume.${sessionRef}`;
+	} else {
+		const verb =
+			cached.status === "completed"
+				? "completed"
+				: cached.status === "cancelled"
+					? "was cancelled"
+					: "failed";
+		const exitText =
+			cached.status === "completed"
+				? `exit code ${cached.exitCode}`
+				: `status ${cached.status}`;
+		text = `Sub-agent "${cached.name}" ${verb} (${exitText}).\n\n${cached.summary}${sessionRef}`;
+	}
 	return {
-		content: [
-			{
-				type: "text",
-				text: `Sub-agent "${cached.name}" ${verb} (${exitText}).\n\n${cached.summary}${sessionRef}`,
-			},
-		],
+		content: [{ type: "text", text }],
 		details: {
 			id: cached.id,
 			name: cached.name,
@@ -75,6 +82,9 @@ function getSubagentWaitSuccessResult(cached: CompletedSubagentResult) {
 			outputTokens: cached.outputTokens,
 			summary: cached.summary,
 			sessionFile: cached.sessionFile,
+			...(cached.errorMessage
+				? { errorMessage: cached.errorMessage }
+				: {}),
 		},
 	};
 }

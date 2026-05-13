@@ -46,7 +46,7 @@ export interface PreparedSubagentLaunch {
 	effectiveModelRef?: string;
 	effectiveTools?: string;
 	effectiveSkills?: string;
-	sessionFile: string;
+	sessionFile: string | null;
 	runtimePaths: ResolvedSubagentRuntimePaths;
 	subagentSessionFile: string;
 	denySet: Set<string>;
@@ -88,14 +88,18 @@ export function prepareSubagentLaunch(
 		? `${effectiveModel}:${effectiveThinking}`
 		: effectiveModel;
 
-	const sessionFile = ctx.sessionManager.getSessionFile();
-	if (!sessionFile) throw new Error("No session file");
-
+	const sessionFile = ctx.sessionManager.getSessionFile() ?? null;
+	// When there is no parent session file (pi --no-session), standalone
+	// no-session children can still launch with a tmpdir fallback.
+	// Lineage-tracked children (lineage-only / fork) will fail later in
+	// seedSubagentSessionFile with a clear error.
+	const parentSessionDir =
+		sessionFile !== null ? dirname(sessionFile) : join(tmpdir(), "pi-subagents", "parentless");
 	const runtimePaths = resolveSubagentRuntimePaths(
 		params,
 		agentDefs,
 		ctx.cwd,
-		dirname(sessionFile),
+		parentSessionDir,
 	);
 	const subagentSessionFile = generateSubagentSessionFile(
 		resolveSubagentNoSession(agentDefs)
@@ -302,7 +306,7 @@ export function getBaseSubagentEnvVars(
 	if (params.agent) envVars.PI_SUBAGENT_AGENT = params.agent;
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);
 	if (sessionMode !== "standalone")
-		envVars.PI_SUBAGENT_PARENT_SESSION = prepared.sessionFile;
+		if (prepared.sessionFile) envVars.PI_SUBAGENT_PARENT_SESSION = prepared.sessionFile;
 	const sessionTitle = buildSubagentSessionTitle(params);
 	if (sessionTitle) envVars.PI_SUBAGENT_SESSION_TITLE = sessionTitle;
 	envVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();

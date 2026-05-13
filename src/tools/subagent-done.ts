@@ -8,6 +8,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
+	findLatestAssistantError,
 	shouldAutoExitOnAgentEnd,
 	shouldMarkUserTookOver,
 } from "../auto-exit.ts";
@@ -308,6 +309,28 @@ export default function (pi: ExtensionAPI) {
 				// normal completion cycle.
 				userTookOver = false;
 				return;
+			}
+
+			// Surface stopReason: "error" (auto-retry exhausted, provider overload, etc.)
+			// via the .exit sidecar so the watcher reports a clear failure instead of
+			// mistaking the crash for a successful completion.
+			const errorInfo = findLatestAssistantError(messages);
+			if (errorInfo) {
+				const sessionFile = process.env.PI_SUBAGENT_SESSION;
+				if (sessionFile) {
+					try {
+						writeFileSync(
+							`${sessionFile}.exit`,
+							JSON.stringify({
+								type: "error",
+								errorMessage: errorInfo.errorMessage,
+								stopReason: errorInfo.stopReason,
+							}),
+						);
+					} catch {
+						// Best effort — session-file fallback can still recover errorMessage.
+					}
+				}
 			}
 
 			writeExitSignal({ type: "done", outputTokens });

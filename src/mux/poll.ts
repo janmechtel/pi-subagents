@@ -2,11 +2,64 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { readScreenAsync } from "./io.ts";
 
 export interface PollResult {
-	reason: "done" | "ping" | "sentinel";
+	reason: "done" | "ping" | "sentinel" | "error";
 	exitCode: number;
 	outputTokens?: number;
 	ping?: { name: string; message: string };
+	errorMessage?: string;
 }
+
+/**
+ * Interpret an `.exit` sidecar payload. Centralized so both
+ * consumeSubagentExitSignal and pollForExit decode the same way.
+ */
+function withDefinedTokens(
+	obj: PollResult,
+	tokens: number | undefined,
+): PollResult {
+	if (tokens !== undefined) {
+		obj.outputTokens = tokens;
+	}
+	return obj;
+}
+
+/**
+ * Interpret an `.exit` sidecar payload. Centralized so both
+ * consumeSubagentExitSignal and pollForExit decode the same way.
+ */
+export function interpretExitSidecar(data: any): PollResult {
+	const tokens =
+		typeof data?.outputTokens === "number" ? data.outputTokens : undefined;
+	if (data?.type === "ping") {
+		return withDefinedTokens(
+			{
+				reason: "ping" as const,
+				exitCode: 0,
+				ping: {
+					name: data.name ?? "subagent",
+					message: data.message ?? "",
+				},
+			},
+			tokens,
+		);
+	}
+	if (data?.type === "error") {
+		const errorMessage =
+			typeof data.errorMessage === "string" && data.errorMessage.trim() !== ""
+				? data.errorMessage
+				: "Subagent exited with stopReason=error (no errorMessage in sidecar).";
+		return withDefinedTokens(
+			{ reason: "error" as const, exitCode: 1, errorMessage },
+			tokens,
+		);
+	}
+	return withDefinedTokens(
+		{ reason: "done" as const, exitCode: 0 },
+		tokens,
+	);
+}
+
+export const __pollForExitTest__ = { interpretExitSidecar };
 
 export function consumeSubagentExitSignal(sessionFile: string): PollResult | null {
 	const exitFile = `${sessionFile}.exit`;
@@ -14,35 +67,12 @@ export function consumeSubagentExitSignal(sessionFile: string): PollResult | nul
 
 	try {
 		const parsed = JSON.parse(readFileSync(exitFile, "utf8"));
-		if (parsed?.type === "ping") {
-			rmSync(exitFile, { force: true });
-			return {
-				reason: "ping",
-				exitCode: 0,
-				outputTokens:
-					typeof parsed.outputTokens === "number"
-						? parsed.outputTokens
-						: undefined,
-				ping: {
-					name: parsed.name ?? "subagent",
-					message: parsed.message ?? "",
-				},
-			};
-		}
-		if (parsed?.type === "done") {
-			rmSync(exitFile, { force: true });
-			return {
-				reason: "done",
-				exitCode: 0,
-				outputTokens:
-					typeof parsed.outputTokens === "number"
-						? parsed.outputTokens
-						: undefined,
-			};
-		}
-	} catch {}
-
-	return null;
+		if (!parsed || typeof parsed !== "object") return null;
+		rmSync(exitFile, { force: true });
+		return interpretExitSidecar(parsed);
+	} catch {
+		return null;
+	}
 }
 
 async function waitForNextPoll(interval: number, signal: AbortSignal) {

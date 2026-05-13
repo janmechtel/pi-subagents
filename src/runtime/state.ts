@@ -14,6 +14,9 @@ function getSubagentCompletionStatus(
 	result: SubagentResult,
 ): SubagentCompletionStatus {
 	if (result.error === "cancelled") return "cancelled";
+	// Provider/network errors may set errorMessage with exitCode 0
+	// (Pi exits cleanly even when model calls fail after retry exhaustion).
+	if (result.errorMessage) return "failed";
 	return result.exitCode === 0 ? "completed" : "failed";
 }
 

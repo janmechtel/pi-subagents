@@ -203,10 +203,21 @@ export function deliverCompletedSubagentResultViaSteer(
 	const sessionRef = cached.sessionFile
 		? `\n\nSession: ${cached.sessionFile}\nResume: pi --session ${cached.sessionFile}`
 		: "";
-	const content =
-		cached.exitCode !== 0
-			? `Sub-agent "${cached.name}" failed (exit code ${cached.exitCode}).\n\n${cached.summary}${sessionRef}`
-			: `Sub-agent "${cached.name}" completed (${formatElapsed(cached.elapsed)}).\n\n${cached.summary}${sessionRef}`;
+	let content: string;
+	if (cached.errorMessage) {
+		// Provider/agent error after auto-retry exhausted.
+		content =
+			`Sub-agent "${cached.name}" failed after ${formatElapsed(cached.elapsed)} ` +
+			`(provider/agent error — auto-retry exhausted).\n\n` +
+			`Error: ${cached.errorMessage}\n\n` +
+			`The subagent did not produce a result. You can retry by spawning a new ` +
+			`subagent or resume the session with subagent_resume.${sessionRef}`;
+	} else {
+		content =
+			cached.exitCode !== 0
+				? `Sub-agent "${cached.name}" failed (exit code ${cached.exitCode}).\n\n${cached.summary}${sessionRef}`
+				: `Sub-agent "${cached.name}" completed (${formatElapsed(cached.elapsed)}).\n\n${cached.summary}${sessionRef}`;
+	}
 
 	pi.sendMessage(
 		{
@@ -228,6 +239,9 @@ export function deliverCompletedSubagentResultViaSteer(
 				elapsed: cached.elapsed,
 				outputTokens: cached.outputTokens,
 				sessionFile: cached.sessionFile,
+				...(cached.errorMessage
+					? { errorMessage: cached.errorMessage }
+					: {}),
 			},
 		},
 		{ triggerTurn: true, deliverAs },

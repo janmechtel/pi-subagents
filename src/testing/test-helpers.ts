@@ -28,11 +28,11 @@ import {
 	resolveSubagentNoSession,
 } from "../launch/policy.ts";
 import {
-	getAmbientCatalogEntries,
-	getSubagentCatalogSignature,
-	renderSubagentCatalogReminder,
-	type SubagentCatalogEntry,
-} from "../agents/catalog-message.ts";
+	getAgentListEntries,
+	getAgentListSignature,
+	renderAgentListReminder,
+	type AgentListEntry,
+} from "../agents/agent-list.ts";
 import {
 	buildResumePiArgs,
 	buildShellChangeDirectoryPrefix,
@@ -93,22 +93,22 @@ export function getEffectiveAgentDefinitionsForTest(baseCwd = process.cwd()) {
 	return getEffectiveAgentDefinitions(baseCwd);
 }
 
-export function getAmbientCatalogEntriesForTest(baseCwd = process.cwd()) {
-	return getAmbientCatalogEntries(baseCwd, (agentDefs) =>
+export function getAgentListEntriesForTest(baseCwd = process.cwd()) {
+	return getAgentListEntries(baseCwd, (agentDefs) =>
 		resolveTaskSessionMode(agentDefs, resolveSubagentNoSession, getNoSessionSeedMode),
 	);
 }
 
-export function renderSubagentCatalogReminderForTest(
-	entries: SubagentCatalogEntry[],
+export function renderAgentListReminderForTest(
+	entries: AgentListEntry[],
 ) {
-	return renderSubagentCatalogReminder(entries);
+	return renderAgentListReminder(entries);
 }
 
-export function getSubagentCatalogSignatureForTest(
-	entries: SubagentCatalogEntry[],
+export function getAgentListSignatureForTest(
+	entries: AgentListEntry[],
 ) {
-	return getSubagentCatalogSignature(entries);
+	return getAgentListSignature(entries);
 }
 
 export function buildChildContextBoundaryForTest(

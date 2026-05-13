@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { AgentDefaults } from "../agents/definitions.ts";
+import { getAgentConfigDir } from "../agents/definitions.ts";
 import type { ParentClosePolicy, SubagentParamsInput } from "../types.ts";
 
 export function getSubagentAgentRequirementError(
@@ -19,11 +20,12 @@ export function getSubagentAgentRequirementError(
 		};
 	}
 	if (!agentDefs) {
+		const globalDir = join(getAgentConfigDir(), "agents");
 		return {
 			content: [
 				{
 					type: "text" as const,
-					text: `Error: agent "${params.agent}" was not found in .pi/agents/ or ~/.pi/agent/agents/.`,
+					text: `Error: agent "${params.agent}" was not found in .pi/agents/ or ${globalDir}.`,
 				},
 			],
 			details: { error: "agent_not_found", agent: params.agent },

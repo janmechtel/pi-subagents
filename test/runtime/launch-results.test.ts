@@ -10,8 +10,8 @@ import {
 	getCompletedSubagentResultForTest,
 	getLaunchedSubagentResultForTest,
 	markSubagentBatchBlockingForTest,
-	getSubagentCatalogSignatureForTest,
-	renderSubagentCatalogReminderForTest,
+	getAgentListSignatureForTest,
+	renderAgentListReminderForTest,
 	resetSubagentStateForTest,
 	routeDetachedSubagentCompletionForTest,
 	setRunningSubagentForTest,
@@ -361,7 +361,7 @@ describe("subagent launch result delivery", () => {
 		assert.equal((message.details as any).entries[0].name, "reviewer");
 		assert.equal(
 			(message.details as any).signature,
-			getSubagentCatalogSignatureForTest((message.details as any).entries),
+			getAgentListSignatureForTest((message.details as any).entries),
 		);
 		assert.match(message.content, /^<system-reminder>\n/);
 		assert.match(message.content, /Available named subagents:/);
@@ -379,7 +379,7 @@ describe("subagent launch result delivery", () => {
 		);
 		assert.match(message.content, /\n<\/system-reminder>$/);
 		assert.equal(
-			renderSubagentCatalogReminderForTest((message.details as any).entries),
+			renderAgentListReminderForTest((message.details as any).entries),
 			message.content,
 		);
 		assert.doesNotMatch(message.content, /subagents_list/);

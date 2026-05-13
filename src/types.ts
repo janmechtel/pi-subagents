@@ -42,6 +42,7 @@ export interface SubagentResult {
 	elapsed: number;
 	outputTokens?: number;
 	error?: string;
+	errorMessage?: string;
 	ping?: SubagentPing;
 }
 
@@ -167,6 +168,7 @@ export interface SubagentResultMessageDetails {
 	sessionFile?: string;
 	outputTokens?: number;
 	error?: string;
+	errorMessage?: string;
 }
 
 export interface SubagentPingMessageDetails {

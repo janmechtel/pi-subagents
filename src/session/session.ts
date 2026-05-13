@@ -88,6 +88,20 @@ export function findLastAssistantMessage(
 		if (msg.message.role !== "assistant") continue;
 		const text = getTextContent(msg);
 		if (text) return text;
+
+		// When auto-retry is exhausted, the assistant message carries
+		// stopReason="error" with errorMessage but no text content.
+		// Surface the underlying error instead of scanning past it
+		// to a stale earlier message.
+		const stopReason = (msg.message as Record<string, unknown>).stopReason;
+		const errorMessage = (msg.message as Record<string, unknown>).errorMessage;
+		if (
+			stopReason === "error" &&
+			typeof errorMessage === "string" &&
+			errorMessage.trim() !== ""
+		) {
+			return `Subagent error: ${errorMessage.trim()}`;
+		}
 	}
 	return null;
 }

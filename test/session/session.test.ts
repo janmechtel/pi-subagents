@@ -186,6 +186,55 @@ describe("session.ts", () => {
 			const entries = [realMsg, emptyMsg] as any[];
 			assert.equal(findLastAssistantMessage(entries), "Real summary content.");
 		});
+
+		it("surfaces errorMessage when last assistant has stopReason=error and no text", () => {
+			const earlierGood = {
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "Investigating the bug..." }],
+				},
+			};
+			const overloadError = {
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [],
+					stopReason: "error",
+					errorMessage: "Anthropic 529 Overloaded after 3 retries",
+				},
+			};
+			const entries = [earlierGood, overloadError] as any[];
+			assert.equal(
+				findLastAssistantMessage(entries),
+				"Subagent error: Anthropic 529 Overloaded after 3 retries",
+			);
+		});
+
+		it("prefers text content even when error stopReason is set", () => {
+			const msg = {
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [{ type: "text", text: "Here is partial output." }],
+					stopReason: "error",
+					errorMessage: "stream interrupted",
+				},
+			};
+			assert.equal(findLastAssistantMessage([msg] as any[]), "Here is partial output.");
+		});
+
+		it("does not invent a summary for stop=error with no errorMessage", () => {
+			const msg = {
+				type: "message",
+				message: {
+					role: "assistant",
+					content: [],
+					stopReason: "error",
+				},
+			};
+			assert.equal(findLastAssistantMessage([msg] as any[]), null);
+		});
 	});
 
 	describe("findLastSubagentOutput", () => {

@@ -353,7 +353,9 @@ describe("ambient agents and runtime paths", () => {
 					),
 				{
 					message:
-						"No session file. Start pi with a persistent session to use subagents.",
+						"Cannot launch lineage-only subagent: no parent session file. " +
+						"Use session-mode: standalone in the agent frontmatter, " +
+						"or start pi with a persistent session (--session or --session-dir).",
 				},
 			);
 		} finally {

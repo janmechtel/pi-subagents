@@ -7,10 +7,10 @@ import {
 	describe,
 	it,
 	subagentsExtension,
-	getAmbientCatalogEntriesForTest,
+	getAgentListEntriesForTest,
 	getEffectiveAgentDefinitionsForTest,
 	getExtensionLaunchArgsForTest,
-	getSubagentCatalogSignatureForTest,
+	getAgentListSignatureForTest,
 	loadAgentDefaults,
 	resetSubagentStateForTest,
 	resolveDenyToolsForTest,
@@ -287,7 +287,7 @@ describe("agent definitions and catalog", () => {
 			true,
 		);
 
-		const ambient = getAmbientCatalogEntriesForTest(dir);
+		const ambient = getAgentListEntriesForTest(dir);
 		assert.deepEqual(
 			ambient.map((entry) => entry.name),
 			["description-only", "global-agent", "lenient-enabled", "project-agent"],
@@ -359,11 +359,11 @@ describe("agent definitions and catalog", () => {
 			`---\nname: reviewer\ndescription: Review changes for regressions\nmode: background\n---\n\nReviewer body.`,
 		);
 
-		const first = getAmbientCatalogEntriesForTest(dir);
-		const second = getAmbientCatalogEntriesForTest(dir);
+		const first = getAgentListEntriesForTest(dir);
+		const second = getAgentListEntriesForTest(dir);
 		assert.equal(
-			getSubagentCatalogSignatureForTest(first),
-			getSubagentCatalogSignatureForTest(second),
+			getAgentListSignatureForTest(first),
+			getAgentListSignatureForTest(second),
 		);
 
 		writeFileSync(
@@ -371,10 +371,10 @@ describe("agent definitions and catalog", () => {
 			`---\nname: reviewer\ndescription: Review critical changes for regressions\nmode: background\n---\n\nReviewer body.`,
 		);
 
-		const changed = getAmbientCatalogEntriesForTest(dir);
+		const changed = getAgentListEntriesForTest(dir);
 		assert.notEqual(
-			getSubagentCatalogSignatureForTest(first),
-			getSubagentCatalogSignatureForTest(changed),
+			getAgentListSignatureForTest(first),
+			getAgentListSignatureForTest(changed),
 		);
 	});
 
@@ -485,7 +485,7 @@ describe("agent definitions and catalog", () => {
 		assert.match(tool.promptSnippet, /Do not emit separate subagent tool calls/);
 		assert.match(
 			tool.promptSnippet,
-			/Use exact catalog names in each child agent field/,
+			/Use exact agent names in each child agent field/,
 		);
 		assert.match(tool.promptSnippet, /include each named agent exactly once/);
 		assert.match(
@@ -506,7 +506,7 @@ describe("agent definitions and catalog", () => {
 		);
 		assert.match(
 			tool.promptSnippet,
-			/Use the catalog\/list memory label only to decide context/,
+			/Use the memory label only to decide context/,
 		);
 		assert.match(tool.promptSnippet, /isolated context starts a fresh chat/);
 		assert.match(
