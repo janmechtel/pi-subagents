@@ -290,7 +290,6 @@ export default function subagentsExtension(pi: ExtensionAPI) {
 	});
 
 	registerSubagentCommands(pi, {
-		loadAgentDefaults: (agentName, cwd) => loadAgentDefaults(agentName, null, cwd),
 		stopRunningSubagent,
 	});
 
