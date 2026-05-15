@@ -7,6 +7,7 @@ export interface AgentDefaults {
 	model?: string;
 	tools?: string;
 	skills?: string;
+	injectSkills?: string;
 	extensions?: string;
 	thinking?: string;
 	denyTools?: string;
@@ -83,6 +84,7 @@ function parseAgentDefinition(
 	const forkOutputReserveTokensRaw = get("fork-output-reserve-tokens");
 	const systemPromptRaw = get("system-prompt");
 	const extensionsRaw = get("extensions");
+	const injectSkillsRaw = get("inject-skills");
 	const flagsRaw = get("flags");
 	const parentClosePolicyRaw = get("parent-close-policy");
 	const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
@@ -95,6 +97,7 @@ function parseAgentDefinition(
 		model: get("model"),
 		tools: get("tools"),
 		skills: get("skills"),
+		injectSkills: injectSkillsRaw,
 		extensions: extensionsRaw,
 		thinking: get("thinking"),
 		denyTools: get("deny-tools"),

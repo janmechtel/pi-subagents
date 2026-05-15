@@ -111,7 +111,7 @@ export async function resumeSubagentSession(
 		: ["--no-extensions", "-e", subagentDonePath];
 	const parityArgs = [
 		...getPersistedPromptLaunchArgs(launchMetadata),
-		...getPersistedSessionParityArgs(launchMetadata),
+		...(await getPersistedSessionParityArgs(launchMetadata)),
 	];
 	const resumeCwd = getResumeCwd(launchMetadata);
 

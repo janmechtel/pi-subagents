@@ -13,6 +13,8 @@ import {
 	getPreparedModel,
 	getPreparedRoleBlock,
 	getPreparedSessionLaunchArgs,
+	getPreparedSkillInjection,
+	getPreparedSkillLaunchArgs,
 	getPreparedSkillList,
 	prepareSubagentLaunch,
 	type SubagentLaunchContext,
@@ -48,7 +50,7 @@ export async function launchBackgroundSubagent(
 ): Promise<RunningSubagent> {
 	const startTime = Date.now();
 	const id = Math.random().toString(16).slice(2, 10);
-	const prepared = prepareSubagentLaunch(params, ctx);
+	const prepared = await prepareSubagentLaunch(params, ctx);
 	const subagentDonePath = join(
 		dirname(dirname(fileURLToPath(import.meta.url))),
 		"tools",
@@ -65,9 +67,11 @@ export async function launchBackgroundSubagent(
 	const summaryInstruction = prepared.agentDefs?.autoExit
 		? "Your FINAL assistant message should summarize what you accomplished."
 		: "Your FINAL assistant message before calling subagent_done, or before asking for manual close, should summarize what you accomplished. After that final message, immediately call subagent_done.";
-	const fullTask = directTask
+	let fullTask = directTask
 		? params.task
 		: `${roleBlock}\n\n${modeHint}\n\n${params.task}\n\n${summaryInstruction}`;
+	const skillInjection = getPreparedSkillInjection(prepared);
+	if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
 
 	const args: string[] = [
 		"-p",
@@ -109,6 +113,7 @@ export async function launchBackgroundSubagent(
 		writeSubagentLaunchMetadataEntry(prepared.subagentSessionFile, launchMetadata);
 	}
 	args.push(...getSubagentToolLaunchArgs(prepared.effectiveTools, prepared.denySet));
+	args.push(...getPreparedSkillLaunchArgs(prepared));
 	args.push(...getFlagsLaunchArgs(prepared.agentDefs?.flags));
 
 	const taskArg = `@${writeTaskArtifact(params.name, fullTask, ctx)}`;

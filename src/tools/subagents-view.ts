@@ -43,8 +43,8 @@ function firstLine(text: string, max=60): string { const l = text.split("\n").ma
 function fmt(l: string, v: string | undefined | null): string { return `  ${l.padEnd(22)} ${(v??"—").padEnd(28)}`; }
 
 const CAT_LABELS = ["── Identity ──","── Launch ──","── Capabilities ──","── Lifecycle ──"];
-const CAT_ORDER = ["name","description","agent file","launched","model","thinking","mode","cwd","flags","tools","deny-tools","extensions","skills","spawning","no-context-files","async","auto-exit","session-mode","parent-close","no-session","timeout","fork-output-reserve"];
-const CAT_STARTS = [0,4,9,15];
+const CAT_ORDER = ["name","description","agent file","launched","model","thinking","mode","cwd","flags","tools","deny-tools","extensions","skills","inject-skills","spawning","no-context-files","async","auto-exit","session-mode","parent-close","no-session","timeout","fork-output-reserve"];
+const CAT_STARTS = [0,4,9,16];
 
 function buildSections(defs: AgentDefaults|null, meta?: PersistedSubagentLaunchMetadata): Array<{title: string; fields: Array<{label:string;value:string}>}> {
 	const fields: Array<{label:string;value:string}> = [];
@@ -61,7 +61,8 @@ function buildSections(defs: AgentDefaults|null, meta?: PersistedSubagentLaunchM
 	fields.push({label:"tools",value:meta?.tools??defs?.tools??"all"});
 	fields.push({label:"deny-tools",value:defs?.denyTools??"—"});
 	fields.push({label:"extensions",value:meta?.extensions?.length?meta.extensions.join(", "):"all"});
-	fields.push({label:"skills",value:meta?.skills??defs?.skills??"—"});
+	fields.push({label:"skills",value:meta?.skills??defs?.skills??"all"});
+	fields.push({label:"inject-skills",value:meta?.injectSkills??defs?.injectSkills??"—"});
 	fields.push({label:"spawning",value:(defs?.spawning??false).toString()});
 	fields.push({label:"no-context-files",value:(meta?meta.noContextFiles:(defs?.noContextFiles??false)).toString()});
 	fields.push({label:"async",value:(meta?meta.async:(defs?.async??true)).toString()});
@@ -101,7 +102,7 @@ function buildRuntimeSection(isRunning: boolean, r: any): {title:string;fields:A
 }
 
 function safeMeta(f: string): PersistedSubagentLaunchMetadata|undefined { try{return readSubagentLaunchMetadata(f)}catch{return} }
-function safeDefs(a: string,c: string): AgentDefaults|null { try{return loadAgentDefaults(a,undefined,c,(h,b)=>b)}catch{return null} }
+function safeDefs(a: string,c: string): AgentDefaults|null { try{return loadAgentDefaults(a,undefined,c,(_h,b)=>b)}catch{return null} }
 function buildStats(a: {toolUses?:number;totalTokens?:number;modelContextWindow?:number;contextLabel?:string;startTime:number}): string[] {
 	const s:string[]=[];
 	if(a.toolUses) s.push(`${a.toolUses} tool use${a.toolUses===1?"":"s"}`);
@@ -182,7 +183,7 @@ function buildAgentDetail(d:any): Array<{title:string;fields:Array<{label:string
 
 export class SubagentsOverlay implements Component {
 	private tab=0; private sel=0; private detail=-1; private scroll=0;
-	private items:Item[]=[]; private w?:number; private cl?:string[];
+	private items:Item[]=[];
 	private timer:ReturnType<typeof setInterval>|null=null; private cp:Promise<void>|null=null;
 	private ctx:ExtensionContext; private done:(r:null)=>void; private th:OverlayTheme;
 
@@ -237,9 +238,9 @@ export class SubagentsOverlay implements Component {
 			t===1?["↑↓ navigate","←→ tabs","m message","i info","Esc close"]:
 			["↑↓ navigate","←→ tabs","i info","Esc close"];
 		add(th.fg("dim",truncateToWidth(hints.join("  "),w)));
-		this.w=w;this.cl=lines;return lines;
+		return lines;
 	}
-	private renderList(add:(s:string)=>void,w:number){
+	private renderList(add:(s:string)=>void,_w:number){
 		const th=this.th;
 		for(let i=0;i<this.items.length;i++){
 			const it=this.items[i]!; const sel=i===this.sel;
@@ -269,7 +270,7 @@ export class SubagentsOverlay implements Component {
 		}
 		add(""); add(th.fg("dim","↑↓/jk scroll · Esc back · alt+s close"));
 	}
-	invalidate(){this.w=undefined;this.cl=undefined;}
+	invalidate(){}
 }
 
 export function registerSubagentsView(pi:ExtensionAPI,runtime:SubagentsViewRuntime){

@@ -41,6 +41,7 @@ export interface PersistedSubagentLaunchMetadata {
 	modelRef?: string;
 	tools?: string;
 	skills?: string;
+	injectSkills?: string;
 	denyTools: string[];
 	extensions?: string[];
 	noContextFiles: boolean;

@@ -26,6 +26,7 @@ import {
 } from "../session/session-files.ts";
 import { buildSubagentSessionTitle } from "../agents/titles.ts";
 import { addToolModeDeniedNames, getSubagentToolLaunchArgs, resolveDenyTools } from "../tools/policy.ts";
+import { buildSkillLaunchPlan, formatInjectedSkills, type SkillLaunchPlan } from "./skills.ts";
 
 export interface SubagentLaunchContext {
 	sessionManager: {
@@ -46,6 +47,8 @@ export interface PreparedSubagentLaunch {
 	effectiveModelRef?: string;
 	effectiveTools?: string;
 	effectiveSkills?: string;
+	effectiveInjectSkills?: string;
+	skillLaunchPlan: SkillLaunchPlan;
 	sessionFile: string | null;
 	runtimePaths: ResolvedSubagentRuntimePaths;
 	subagentSessionFile: string;
@@ -70,10 +73,10 @@ function loadAgentDefaults(
 	);
 }
 
-export function prepareSubagentLaunch(
+export async function prepareSubagentLaunch(
 	params: SubagentParamsInput,
 	ctx: SubagentLaunchContext,
-): PreparedSubagentLaunch {
+): Promise<PreparedSubagentLaunch> {
 	const agentDefs = params.agent
 		? loadAgentDefaults(params.agent, params.cwd, ctx.cwd)
 		: null;
@@ -88,6 +91,7 @@ export function prepareSubagentLaunch(
 	const effectiveModel = params.model ?? agentDefs?.model;
 	const effectiveTools = params.tools ?? agentDefs?.tools;
 	const effectiveSkills = params.skills ?? agentDefs?.skills;
+	const effectiveInjectSkills = agentDefs?.injectSkills;
 	const effectiveThinking = agentDefs?.thinking;
 	const effectiveModelRef = effectiveThinking
 		? `${effectiveModel}:${effectiveThinking}`
@@ -116,6 +120,13 @@ export function prepareSubagentLaunch(
 		effectiveTools,
 	);
 	const effectiveExtensions = resolveSubagentExtensions(agentDefs);
+	const skillLaunchPlan = await buildSkillLaunchPlan(
+		effectiveSkills,
+		effectiveInjectSkills,
+		runtimePaths.effectiveCwd ?? ctx.cwd,
+		runtimePaths.effectiveAgentConfigDir,
+		effectiveExtensions,
+	);
 	const identity = buildIdentityBlock(agentDefs, params.systemPrompt);
 	const identityInSystemPrompt = !!(agentDefs?.systemPromptMode && identity);
 
@@ -126,6 +137,8 @@ export function prepareSubagentLaunch(
 		effectiveModelRef,
 		effectiveTools,
 		effectiveSkills,
+		effectiveInjectSkills,
+		skillLaunchPlan,
 		sessionFile,
 		runtimePaths,
 		subagentSessionFile,
@@ -146,12 +159,20 @@ export function getPreparedModel(
 		: prepared.effectiveModel;
 }
 
-export function getPreparedSkillList(prepared: PreparedSubagentLaunch): string[] {
-	if (!prepared.effectiveSkills) return [];
-	return prepared.effectiveSkills
-		.split(",")
-		.map((skill) => skill.trim())
-		.filter(Boolean);
+export function getPreparedSkillList(_prepared: PreparedSubagentLaunch): string[] {
+	return [];
+}
+
+export function getPreparedSkillInjection(prepared: PreparedSubagentLaunch): string {
+	return formatInjectedSkills(
+		prepared.skillLaunchPlan.injectSkills,
+		prepared.runtimePaths.effectiveCwd ?? process.cwd(),
+		prepared.skillLaunchPlan.betterSkillsActive,
+	);
+}
+
+export function getPreparedSkillLaunchArgs(prepared: PreparedSubagentLaunch): string[] {
+	return prepared.skillLaunchPlan.launchArgs;
 }
 
 export function getExtensionLaunchArgs(
@@ -206,15 +227,24 @@ export function getPersistedPromptLaunchArgs(
 	return args;
 }
 
-export function getPersistedSessionParityArgs(
+export async function getPersistedSessionParityArgs(
 	metadata: PersistedSubagentLaunchMetadata | undefined,
-): string[] {
+): Promise<string[]> {
 	const args: string[] = [];
 	if (!metadata) return args;
 	if (metadata.modelRef) args.push("--model", metadata.modelRef);
 	if (metadata.noContextFiles) args.push("--no-context-files");
 	args.push(
 		...getSubagentToolLaunchArgs(metadata.tools, new Set(metadata.denyTools)),
+	);
+	args.push(
+		...(await buildSkillLaunchPlan(
+			metadata.skills,
+			undefined,
+			metadata.cwd,
+			metadata.agentConfigDir,
+			metadata.extensions,
+		)).launchArgs,
 	);
 	args.push(...getFlagsLaunchArgs(metadata.flags));
 	return args;
@@ -268,6 +298,9 @@ export function buildPersistedSubagentLaunchMetadata(
 			: {}),
 		...(prepared.effectiveTools ? { tools: prepared.effectiveTools } : {}),
 		...(prepared.effectiveSkills ? { skills: prepared.effectiveSkills } : {}),
+		...(prepared.effectiveInjectSkills
+			? { injectSkills: prepared.effectiveInjectSkills }
+			: {}),
 		denyTools: [...prepared.denySet],
 		...(prepared.effectiveExtensions !== undefined
 			? { extensions: prepared.effectiveExtensions }

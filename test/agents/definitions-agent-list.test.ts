@@ -88,19 +88,20 @@ describe("agent definitions and catalog", () => {
 		);
 	});
 
-	it("reads skills from skills frontmatter only", () => {
+	it("reads skills and inject-skills from frontmatter", () => {
 		const dir = createTestDir();
 		const configDir = join(dir, "agent-root");
 		const agentsDir = join(configDir, "agents");
 		mkdirSync(agentsDir, { recursive: true });
 		writeFileSync(
 			join(agentsDir, "tester.md"),
-			`---\nname: tester\nskill: debugger\nskills: pua\n---\n\nYou are the tester.`,
+			`---\nname: tester\nskill: debugger\nskills: pua\ninject-skills: pua, torpathy\n---\n\nYou are the tester.`,
 		);
 		process.env.PI_CODING_AGENT_DIR = configDir;
 
 		const defs = loadAgentDefaults("tester");
 		assert.equal(defs?.skills, "pua");
+		assert.equal(defs?.injectSkills, "pua, torpathy");
 	});
 
 	it("parses session-mode frontmatter and lets fork override it per launch", () => {

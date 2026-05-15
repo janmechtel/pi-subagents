@@ -132,7 +132,8 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `extensions` | all extensions | Comma-separated extension allowlist for the child |
 | `tools` | `all` | Built-in Pi tools: `all`, `none`, or a comma-separated subset of `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` |
 | `deny-tools` | unset | Extra tool names to remove from the child |
-| `skills` | unset | Comma-separated skills loaded into the child prompt |
+| `skills` | `all` | Child skill availability: `all`, `none`, or a comma-separated allowlist resolved by skill name |
+| `inject-skills` | unset | Comma-separated skills to load into the child prompt before the task |
 | `no-context-files` | `false` | Skip `AGENTS.md` and `CLAUDE.md` discovery in the child |
 | `no-session` | `false` | Use an ephemeral child session file and delete it after completion |
 | `auto-exit` | `false` | Close the child after a normal completion |
@@ -305,6 +306,132 @@ Local paths stay paths. Package and remote sources keep their normal prefixes:
 ---
 name: reviewer
 extensions: ./extensions/local.ts, npm:@foo/bar, git:github.com/user/repo
+---
+```
+
+### Child skills
+
+`skills` controls which skills the child Pi process can use.
+
+```md
+---
+name: reviewer
+skills: all
+---
+```
+
+`skills: all` is the default. Pi keeps its normal skill discovery: project skills, global skills, settings, packages, and extension-provided skills.
+
+```md
+---
+name: reviewer
+skills: none
+---
+```
+
+`skills: none` launches the child with `--no-skills`. The child has no discovered skills, and `inject-skills` is not allowed.
+
+```md
+---
+name: reviewer
+skills: pua,torpathy
+---
+```
+
+A comma-separated list is an allowlist. `pi-subagents` resolves each name through Pi's resource loader, then launches the child with `--no-skills --skill <resolved-path> ...`. Only those named skills are available.
+
+`skills` resolves names from the same places Pi sees skills, including:
+
+- `.pi/skills/`
+- `.agents/skills/`
+- global skill directories
+- settings and package resources
+- skills bundled by extension packages listed in `extensions`
+
+Package skill example:
+
+```json
+{
+  "name": "my-pi-package",
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  }
+}
+```
+
+An agent can allowlist a skill from that package by loading the package and naming the skill:
+
+```md
+---
+name: reviewer
+extensions: ./path/to/my-pi-package
+skills: packaged-reviewer
+---
+```
+
+`inject-skills` controls which available skills start inside the child task context.
+
+```md
+---
+name: reviewer
+skills: pua,torpathy
+inject-skills: torpathy
+---
+```
+
+`inject-skills` reads the selected `SKILL.md` files, strips frontmatter, and prepends `<skill>` blocks to the child task artifact. Multiple injected skills appear in order before the task. The child gets one startup task, so it cannot answer between injected skills and the task.
+
+Injected skills must be available under `skills`. These fail before launch:
+
+```md
+skills: none
+inject-skills: pua
+```
+
+```md
+skills: pua
+inject-skills: torpathy
+```
+
+By default, injected skills use Pi's native skill shape:
+
+```xml
+<skill name="pua">
+References are relative to /path/to/pua.
+
+...skill body...
+</skill>
+```
+
+If [`pi-better-skills`](https://github.com/edxeth/pi-better-skills) is loaded for the child, injected skills use its path-context shape:
+
+```xml
+<skill name="pua">
+<skill_context>
+  <skill_dir>/path/to/pua</skill_dir>
+  <workspace_dir>/path/to/workspace</workspace_dir>
+
+  <path_policy>
+    Relative file references in this SKILL.md normally resolve from skill_dir when they exist there.
+    Plain workspace commands like git status and bun test usually run in the workspace unless instructed otherwise.
+    Use $PI_SKILL_DIR/path for explicit bundled skill files.
+    Use $PI_WORKSPACE/path for explicit workspace/project files.
+  </path_policy>
+</skill_context>
+
+...skill body...
+</skill>
+```
+
+Load `pi-better-skills` like any other child extension:
+
+```md
+---
+name: researcher
+extensions: git:github.com/edxeth/pi-better-skills
+skills: deep-research
+inject-skills: deep-research
 ---
 ```
 

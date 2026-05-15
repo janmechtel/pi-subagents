@@ -8,6 +8,7 @@ import {
 	it,
 	buildResumePiArgsForTest,
 	buildShellChangeDirectoryPrefixForTest,
+	buildSkillLaunchPlanForTest,
 	getFlagsLaunchArgs,
 	getNoSessionSeedModeForTest,
 	getPiInvocationForTest,
@@ -60,6 +61,121 @@ describe("agent launch configuration", () => {
 			"--plan",
 			"arg with spaces",
 		]);
+	});
+
+	it("builds no skill launch args when skills are all", async () => {
+		const dir = createTestDir();
+		assert.deepEqual((await buildSkillLaunchPlanForTest("all", undefined, dir)).launchArgs, []);
+		assert.deepEqual((await buildSkillLaunchPlanForTest(undefined, undefined, dir)).launchArgs, []);
+	});
+
+	it("builds --no-skills when skills are none", async () => {
+		const dir = createTestDir();
+		assert.deepEqual((await buildSkillLaunchPlanForTest("none", undefined, dir)).launchArgs, [
+			"--no-skills",
+		]);
+	});
+
+	it("resolves multiple skill names to explicit skill paths", async () => {
+		const dir = createTestDir();
+		const configDir = join(dir, "agent-root");
+		const projectSkillDir = join(dir, ".pi", "skills", "pua");
+		const globalSkillDir = join(configDir, "skills", "torpathy");
+		mkdirSync(projectSkillDir, { recursive: true });
+		mkdirSync(globalSkillDir, { recursive: true });
+		writeFileSync(
+			join(projectSkillDir, "SKILL.md"),
+			"---\nname: pua\ndescription: Debug stubborn failures.\n---\n\n# PUA",
+		);
+		writeFileSync(
+			join(globalSkillDir, "SKILL.md"),
+			"---\nname: torpathy\ndescription: Decide where fixes belong.\n---\n\n# Torpathy",
+		);
+
+		const plan = await buildSkillLaunchPlanForTest(
+			"pua, torpathy",
+			"pua, torpathy",
+			dir,
+			configDir,
+		);
+
+		assert.deepEqual(plan.injectNames, ["pua", "torpathy"]);
+		assert.deepEqual(plan.launchArgs, [
+			"--no-skills",
+			"--skill",
+			join(projectSkillDir, "SKILL.md"),
+			"--skill",
+			join(globalSkillDir, "SKILL.md"),
+		]);
+	});
+
+	it("resolves extension-package skills by name", async () => {
+		const dir = createTestDir();
+		const packageDir = join(dir, "skill-package");
+		const extensionDir = join(packageDir, "extensions");
+		const skillDir = join(packageDir, "skills", "pkg-skill");
+		mkdirSync(extensionDir, { recursive: true });
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(
+			join(packageDir, "package.json"),
+			JSON.stringify({
+				name: "skill-package",
+				pi: { extensions: ["./extensions"], skills: ["./skills"] },
+			}),
+		);
+		writeFileSync(join(extensionDir, "index.ts"), "export default function extension() {}\n");
+		writeFileSync(
+			join(skillDir, "SKILL.md"),
+			"---\nname: pkg-skill\ndescription: Packaged skill.\n---\n\n# Packaged Skill",
+		);
+
+		const plan = await buildSkillLaunchPlanForTest(
+			"pkg-skill",
+			"pkg-skill",
+			dir,
+			undefined,
+			[packageDir],
+		);
+
+		assert.deepEqual(plan.injectNames, ["pkg-skill"]);
+		assert.deepEqual(plan.launchArgs, [
+			"--no-skills",
+			"--skill",
+			join(skillDir, "SKILL.md"),
+		]);
+	});
+
+	it("resolves project .agents skills by name", async () => {
+		const dir = createTestDir();
+		const skillDir = join(dir, ".agents", "skills", "review");
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(
+			join(skillDir, "SKILL.md"),
+			"---\nname: review\ndescription: Review changes.\n---\n\n# Review",
+		);
+
+		const plan = await buildSkillLaunchPlanForTest("review", undefined, dir);
+
+		assert.deepEqual(plan.launchArgs, [
+			"--no-skills",
+			"--skill",
+			join(skillDir, "SKILL.md"),
+		]);
+	});
+
+	it("rejects injecting a skill outside the availability list", async () => {
+		const dir = createTestDir();
+		const skillDir = join(dir, ".pi", "skills", "pua");
+		mkdirSync(skillDir, { recursive: true });
+		writeFileSync(
+			join(skillDir, "SKILL.md"),
+			"---\nname: pua\ndescription: Debug stubborn failures.\n---\n\n# PUA",
+		);
+
+		await assert.rejects(
+			() => buildSkillLaunchPlanForTest("pua", "torpathy", dir),
+			/Cannot inject unavailable skill: torpathy/,
+		);
 	});
 
 	it("passes flags through getPiInvocation for background children", () => {

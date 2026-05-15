@@ -22,6 +22,7 @@ import {
 } from "./launch/policy.ts";
 import { resolveSubagentCwd } from "./launch/runtime-paths.ts";
 export { resolveSubagentConfigDir } from "./launch/runtime-paths.ts";
+export { buildSkillLaunchPlan as buildSkillLaunchPlanForTest } from "./launch/skills.ts";
 import {
 	resolveEffectiveSessionMode as resolveEffectiveSessionModeFromSessionFiles,
 	resolveTaskSessionMode as resolveTaskSessionModeFromSessionFiles,

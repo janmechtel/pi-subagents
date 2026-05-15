@@ -12,6 +12,8 @@ import {
 	getPreparedModel,
 	getPreparedRoleBlock,
 	getPreparedSessionLaunchArgs,
+	getPreparedSkillInjection,
+	getPreparedSkillLaunchArgs,
 	getPreparedSkillList,
 	getFlagsLaunchArgs,
 	prepareSubagentLaunch,
@@ -25,8 +27,6 @@ import {
 import {
 	createSurface,
 	exitStatusVar,
-	getMuxBackend,
-	sendCommand,
 	sendShellCommand,
 	shellEscape,
 } from "../mux.ts";
@@ -61,7 +61,7 @@ export async function launchInteractiveSubagent(
 ): Promise<RunningSubagent> {
 	const startTime = Date.now();
 	const id = Math.random().toString(16).slice(2, 10);
-	const prepared = prepareSubagentLaunch(params, ctx);
+	const prepared = await prepareSubagentLaunch(params, ctx);
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);
 	const noSession = resolveSubagentNoSession(prepared.agentDefs);
 	const noSessionSeedMode = noSession ? getNoSessionSeedMode(sessionMode) : null;
@@ -88,9 +88,11 @@ export async function launchInteractiveSubagent(
 			`The title MUST start with [${agentType}] followed by a short description of your current task. ` +
 			`Example: "[${agentType}] Analyzing auth module". Keep it concise.`;
 	const roleBlock = getPreparedRoleBlock(prepared);
-	const fullTask = directTask
+	let fullTask = directTask
 		? params.task
 		: `${roleBlock}\n\n${modeHint}\n\n${tabTitleInstruction}\n\n${params.task}\n\n${summaryInstruction}`;
+	const skillInjection = getPreparedSkillInjection(prepared);
+	if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
 
 	const parts = getPiShellParts(getPreparedSessionLaunchArgs(prepared));
 	const { boundarySystemPrompt: shouldWriteChildBoundary } =
@@ -130,6 +132,9 @@ export async function launchInteractiveSubagent(
 		writeSubagentLaunchMetadataEntry(prepared.subagentSessionFile, launchMetadata);
 	}
 	for (const arg of getSubagentToolLaunchArgs(prepared.effectiveTools, prepared.denySet)) {
+		parts.push(shellEscape(arg));
+	}
+	for (const arg of getPreparedSkillLaunchArgs(prepared)) {
 		parts.push(shellEscape(arg));
 	}
 	for (const flag of getFlagsLaunchArgs(prepared.agentDefs?.flags)) {

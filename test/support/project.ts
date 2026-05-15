@@ -17,6 +17,7 @@ export {
 	buildPiPromptArgsForTest,
 	buildResumePiArgsForTest,
 	buildShellChangeDirectoryPrefixForTest,
+	buildSkillLaunchPlanForTest,
 	buildSubagentSessionTitleForTest,
 	getAgentListEntriesForTest,
 	getCompletedSubagentResultForTest,
