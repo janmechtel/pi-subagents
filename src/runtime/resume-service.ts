@@ -16,6 +16,7 @@ import {
 	resolveResumeLaunchMetadata,
 } from "../launch/resume.ts";
 import { createSurface, exitStatusVar, muxSetupHint, sendCommand, sendShellCommand, shellEscape } from "../mux.ts";
+import { clearSubagentExitSidecar } from "../session/exit-sidecar.ts";
 import { getEntryCount } from "../session/session.ts";
 import {
 	getDoneSentinelFile,
@@ -27,6 +28,7 @@ import type { RunningSubagent, SubagentResult } from "../types.ts";
 
 export interface ResumeServiceRuntime {
 	getShellReadyDelayMs(): number;
+	waitForInteractivePrompt(surface: string): Promise<void>;
 	isMuxAvailable(): boolean;
 	watchBackgroundSubagent(
 		running: RunningSubagent,
@@ -98,6 +100,7 @@ export async function resumeSubagentSession(
 	}
 
 	const entryCountBefore = getEntryCount(sessionFile);
+	clearSubagentExitSidecar(sessionFile);
 	const subagentDonePath = join(
 		dirname(fileURLToPath(import.meta.url)),
 		"..",
@@ -141,6 +144,7 @@ export async function resumeSubagentSession(
 	const resumedAutoExit =
 		launchMetadata?.autoExit ?? metadata.autoExit ?? true;
 	if (resumedAutoExit) resumeEnvVars.PI_SUBAGENT_AUTO_EXIT = "1";
+	resumeEnvVars.PI_PACKAGE_DIR = "";
 	resumeEnvVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
 
 	const id = Math.random().toString(16).slice(2, 10);
@@ -197,6 +201,7 @@ export async function resumeSubagentSession(
 		await new Promise<void>((resolve) =>
 			setTimeout(resolve, runtime.getShellReadyDelayMs()),
 		);
+		await runtime.waitForInteractivePrompt(surface);
 		const doneSentinelFile = getDoneSentinelFile(sessionFile, id);
 		const parts = getPiShellParts(
 			buildResumePiArgs(sessionFile, "interactive"),
@@ -210,7 +215,8 @@ export async function resumeSubagentSession(
 			.join(" ")} `;
 		const sentinelPath = shellEscape(doneSentinelFile);
 		const exitVar = exitStatusVar();
-		const command = `trap 'printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}' EXIT; ${buildShellChangeDirectoryPrefix(resumeCwd)}${resumeEnvPrefix}${parts.join(" ")}`;
+		const exitTrap = shellEscape(`printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}`);
+		const command = `trap ${exitTrap} EXIT; ${buildShellChangeDirectoryPrefix(resumeCwd)}${resumeEnvPrefix}${parts.join(" ")}`;
 		sendShellCommand(surface, command);
 		if (task) {
 			await new Promise<void>((resolve) =>

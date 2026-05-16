@@ -11,7 +11,7 @@ import type { CompletedSubagentResult, RunningSubagent, SubagentParamsInput, Sub
 import type { SubagentLaunchContext } from "../launch/prep.ts";
 import { getStartedSubagentDetails, getLaunchedSubagentResult as getLaunchedSubagentResultWithRuntime, routeDetachedSubagentCompletion as routeDetachedSubagentCompletionWithDeps, stopRunningSubagent as stopRunningSubagentWithDeps, wireSubagentSteerBack as wireSubagentSteerBackWithDeps, deliverCompletedSubagentResultViaSteer as deliverCompletedSubagentResultViaSteerWithDeps, findTrackedSubagent } from "./running-registry.ts";
 import { waitForSubagentResult as waitForSubagentResultWithRuntime, type WaitRuntime } from "./wait.ts";
-import { asSubagentToolResult, cacheCompletedSubagentResult, clearSubagentShutdownTimer, completedSubagentResults, moduleAbortController, resetRuntimeStateForTest, runningSubagents, widgetManager, withSubagentBatchStop } from "./state.ts";
+import { asSubagentToolResult, cacheCompletedSubagentResult, completedSubagentResults, moduleAbortController, resetRuntimeStateForTest, runningSubagents, widgetManager, withSubagentBatchStop } from "./state.ts";
 
 export { getWatcherSignal, moduleAbortController, runningSubagents, widgetManager } from "./state.ts";
 
@@ -27,7 +27,7 @@ export function getShellReadyDelayMs(): number {
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
 }
 
-async function waitForInteractivePrompt(surface: string): Promise<void> {
+export async function waitForInteractivePrompt(surface: string): Promise<void> {
 	const start = Date.now();
 	const timeoutMs = 15000;
 	let previous = "";

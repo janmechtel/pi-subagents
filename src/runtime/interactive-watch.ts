@@ -6,6 +6,7 @@ import {
 } from "../mux.ts";
 import type { RunningSubagent, SubagentResult } from "../types.ts";
 import { findLastSubagentOutput, getNewEntries } from "../session/session.ts";
+import { traceSubagentLaunch } from "../launch/trace.ts";
 
 export interface InteractiveWatchRuntime {
 	cleanupNoSessionSessionFile(running: RunningSubagent): void;
@@ -21,6 +22,7 @@ export async function watchSubagent(
 		throw new Error("watchSubagent called on a background agent (no surface)");
 
 	try {
+		traceSubagentLaunch("interactive.watch.start", { name, surface, sessionFile, signalAborted: signal.aborted });
 		const pollResult = await pollForExit(surface, signal, {
 			interval: 1000,
 			sessionFile,
@@ -39,6 +41,7 @@ export async function watchSubagent(
 			},
 		});
 
+		traceSubagentLaunch("interactive.watch.pollResult", { name, surface, sessionFile, pollResult });
 		const elapsed = Math.floor((Date.now() - startTime) / 1000);
 		let summary: string;
 		if (!running.noSession && existsSync(sessionFile)) {
@@ -65,7 +68,9 @@ export async function watchSubagent(
 				? undefined
 				: consumeSubagentExitSignal(sessionFile);
 		cleanupDoneSentinel(running);
-		closeSurface(surface);
+		try {
+			closeSurface(surface);
+		} catch {}
 		runtime.cleanupNoSessionSessionFile(running);
 
 		return {
@@ -81,6 +86,7 @@ export async function watchSubagent(
 		};
 	} catch (err: unknown) {
 		const errorMessage = err instanceof Error ? err.message : String(err);
+		traceSubagentLaunch("interactive.watch.error", { name, surface, sessionFile, errorMessage, signalAborted: signal.aborted });
 		cleanupDoneSentinel(running);
 		try {
 			closeSurface(surface);

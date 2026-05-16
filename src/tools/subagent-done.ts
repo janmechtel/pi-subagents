@@ -12,8 +12,35 @@ import {
 	shouldAutoExitOnAgentEnd,
 	shouldMarkUserTookOver,
 } from "../auto-exit.ts";
+import { areSubagentSessionTitlesDisabled } from "../agents/titles.ts";
 
 const require = createRequire(import.meta.url);
+
+function applySubagentSessionTitle(
+	ctx:
+		| {
+				sessionManager?: {
+					getHeader?: () => unknown;
+					getSessionName?: () => string | undefined;
+				};
+			}
+		| undefined,
+	pi: ExtensionAPI,
+) {
+	if (areSubagentSessionTitlesDisabled()) return;
+
+	const title = process.env.PI_SUBAGENT_SESSION_TITLE?.trim();
+	if (!title) return;
+
+	const header = ctx?.sessionManager?.getHeader?.() as
+		| { name?: string }
+		| null
+		| undefined;
+	if (header && header.name !== title) header.name = title;
+
+	if (ctx?.sessionManager?.getSessionName?.() === title) return;
+	pi.setSessionName(title);
+}
 
 function isMissingOptionalDependency(error: unknown, id: string): boolean {
 	const maybeError = error as { code?: unknown; message?: unknown } | null;
@@ -260,6 +287,7 @@ export default function (pi: ExtensionAPI) {
 
 	// Show widget + status bar on session start
 	pi.on("session_start", (_event, ctx) => {
+		applySubagentSessionTitle(ctx, pi);
 		refreshDeniedTools(ctx);
 		setTimeout(() => refreshDeniedTools(), 0);
 		setTimeout(() => refreshDeniedTools(), 250);
@@ -279,16 +307,18 @@ export default function (pi: ExtensionAPI) {
 		outputTokens += message.usage.output ?? 0;
 	});
 
+	// Every subagent child reports Pi shutdown through the session sidecar. This is
+	// the primary lifecycle signal; mux/shell sentinels are only pane-death fallback.
+	pi.on("session_shutdown", () => {
+		writeExitSignal({ type: "done", outputTokens });
+	});
+
 	// Auto-exit: when the agent loop ends, shut down automatically.
 	// If the user interrupts (Escape) or sends any input, auto-exit is disabled
 	// for that cycle — the user wants to steer. Once they're done and the agent
 	// completes normally again, auto-exit re-engages.
 	// Enabled via `auto-exit: true` in agent frontmatter.
 	if (autoExit) {
-		pi.on("session_shutdown", () => {
-			writeExitSignal({ type: "done", outputTokens });
-		});
-
 		let userTookOver = false;
 		let agentStarted = false;
 

@@ -15,6 +15,7 @@ import {
 	parseCommandWords,
 } from "../launch/child-command.ts";
 import {
+	getBaseSubagentEnvVars,
 	getExtensionLaunchArgs,
 	getPreparedSessionLaunchArgs,
 	type PreparedSubagentLaunch,
@@ -71,7 +72,7 @@ import {
 	getSubagentToolsConfigError,
 	resolveDenyTools,
 } from "../tools/policy.ts";
-import { getSubagentNameError } from "../tools/subagent-tools.ts";
+import { getSubagentNameError, isInitialPromptInvocation, isOneShotPromptInvocation, shouldForceSynchronousLaunch } from "../tools/subagent-tools.ts";
 import {
 	buildSubagentSessionTitle,
 	getSubagentDisplayTitle,
@@ -136,6 +137,18 @@ export function getSubagentNameErrorForTest(name: string | undefined) {
 	return getSubagentNameError(name);
 }
 
+export function isOneShotPromptInvocationForTest(argv: string[]) {
+	return isOneShotPromptInvocation(argv);
+}
+
+export function isInitialPromptInvocationForTest(argv: string[]) {
+	return isInitialPromptInvocation(argv);
+}
+
+export function shouldForceSynchronousLaunchForTest(hasUI: boolean, argv: string[]) {
+	return shouldForceSynchronousLaunch(hasUI, argv);
+}
+
 export function getTerminalAssistantSummaryForTest(entries: SessionEntryLike[]) {
 	return getTerminalAssistantSummary(entries);
 }
@@ -173,13 +186,14 @@ export function seedSubagentSessionFileForTest(
 	parentSessionFile: string,
 	childSessionFile: string,
 	cwd = process.cwd(),
-	forkTrimOptions?: {
-		childContextWindow: number;
+	seedOptions?: {
+		childContextWindow?: number;
 		reserveTokens?: number;
 		launchToolCallId?: string;
+		sessionName?: string;
 	},
 ) {
-	seedSubagentSessionFile(mode, parentSessionFile, childSessionFile, cwd, forkTrimOptions);
+	seedSubagentSessionFile(mode, parentSessionFile, childSessionFile, cwd, seedOptions);
 }
 
 export function resolveTaskSessionModeForTest(agentDefs: AgentDefaults | null) {
@@ -312,6 +326,22 @@ export function getPreparedSessionLaunchArgsForTest(
 		agentDefs,
 		subagentSessionFile: "child.jsonl",
 	} as PreparedSubagentLaunch);
+}
+
+export function getBaseSubagentEnvVarsForTest(
+	agentDefs: AgentDefaults | null,
+) {
+	return getBaseSubagentEnvVars(
+		{
+			agentDefs,
+			denySet: new Set<string>(),
+			runtimePaths: {},
+			subagentSessionFile: "child.jsonl",
+			sessionFile: "parent.jsonl",
+		} as PreparedSubagentLaunch,
+		{ agent: "tester", name: "child", title: "Child task", task: "Task" },
+		() => "lineage-only",
+	);
 }
 
 export function getResumeCwdForTest(

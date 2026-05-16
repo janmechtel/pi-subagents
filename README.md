@@ -129,7 +129,7 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `model` | Pi default | Child model, including optional thinking suffix |
 | `thinking` | model default | Child thinking level |
 | `cwd` | parent cwd | Working directory for the child |
-| `extensions` | all extensions | Comma-separated extension allowlist for the child |
+| `extensions` | `all` | Extension availability: `all`, `none`, or a comma-separated allowlist for the child |
 | `tools` | `all` | Built-in Pi tools: `all`, `none`, or a comma-separated subset of `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` |
 | `deny-tools` | unset | Extra tool names to remove from the child |
 | `skills` | `all` | Child skill availability: `all`, `none`, or a comma-separated allowlist resolved by skill name |
@@ -289,7 +289,11 @@ For large output, let the child use Pi's `write` tool and mention the path in it
 
 ## Child tools and extensions
 
-Children load all extensions by default. Set `extensions` when you want a smaller child environment.
+Children load all extensions by default. Omit `extensions` or set `extensions: all` for the default Pi extension set.
+
+Set `extensions: none` to launch with no normal extensions. `pi-subagents` still injects its mandatory internal helper so child lifecycle and result delivery continue to work.
+
+Set a comma-separated allowlist when you want a smaller child environment.
 
 ```md
 ---
@@ -298,7 +302,7 @@ extensions: .pi/extensions/safe-tools.ts, npm:@foo/bar
 ---
 ```
 
-When `extensions` is set, Pi launches the child with `--no-extensions`, injects the subagent protocol helper, then loads only the allowlisted extensions.
+When `extensions` is `none` or an allowlist, Pi launches the child with `--no-extensions`, injects the subagent protocol helper, then loads only the allowlisted extensions.
 
 Local paths stay paths. Package and remote sources keep their normal prefixes:
 

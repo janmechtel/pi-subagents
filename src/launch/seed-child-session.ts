@@ -68,7 +68,10 @@ export function seedPreparedSubagentSession(
 			prepared.sessionFile,
 			prepared.subagentSessionFile,
 			prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
-			forkTrimOptions,
+			{
+				...forkTrimOptions,
+				...(prepared.sessionTitle ? { sessionName: prepared.sessionTitle } : {}),
+			},
 		);
 		if (boundarySystemPrompt) {
 			const boundaryOptions = {

@@ -31,6 +31,7 @@ import {
 	shellEscape,
 } from "../mux.ts";
 import type { RunningSubagent, SubagentParamsInput } from "../types.ts";
+import { clearSubagentExitSidecar } from "../session/exit-sidecar.ts";
 import { getEntryCount } from "../session/session.ts";
 import {
 	buildPiPromptArgs,
@@ -41,6 +42,7 @@ import {
 } from "../session/session-files.ts";
 import { getNoSessionSeedMode, seedPreparedSubagentSession } from "./seed-child-session.ts";
 import { writeSystemPromptArtifact, writeTaskArtifact } from "./prompt-artifacts.ts";
+import { traceSubagentLaunch } from "./trace.ts";
 import {
 	getSubagentDisplayTitle,
 	isSetTabTitleToolEnabled,
@@ -63,16 +65,34 @@ export async function launchInteractiveSubagent(
 	const id = Math.random().toString(16).slice(2, 10);
 	const prepared = await prepareSubagentLaunch(params, ctx);
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);
+	traceSubagentLaunch("interactive.prepared", {
+		id,
+		name: params.name,
+		agent: params.agent,
+		sessionMode,
+		sessionFile: prepared.subagentSessionFile,
+		cwd: prepared.runtimePaths.effectiveCwd,
+		model: prepared.effectiveModelRef,
+		skills: prepared.effectiveSkills,
+		injectSkills: prepared.effectiveInjectSkills,
+	});
 	const noSession = resolveSubagentNoSession(prepared.agentDefs);
 	const noSessionSeedMode = noSession ? getNoSessionSeedMode(sessionMode) : null;
 	const directTask = sessionMode === "fork" || noSessionSeedMode === "fork";
 	const surfacePreCreated = !!options?.surface;
 	const surface = options?.surface ?? createSurface(params.name);
+	traceSubagentLaunch("interactive.surface", {
+		id,
+		name: params.name,
+		surface,
+		surfacePreCreated,
+	});
 	const doneSentinelFile = getDoneSentinelFile(prepared.subagentSessionFile, id);
 	if (!surfacePreCreated) {
 		await new Promise<void>((resolve) =>
 			setTimeout(resolve, runtime.getShellReadyDelayMs()),
 		);
+		await runtime.waitForInteractivePrompt(surface);
 	}
 	const modeHint = prepared.agentDefs?.autoExit
 		? "Complete your task autonomously."
@@ -155,6 +175,13 @@ export async function launchInteractiveSubagent(
 		taskArg,
 		directTask,
 	);
+	traceSubagentLaunch("interactive.promptArgs", {
+		id,
+		name: params.name,
+		directTask,
+		taskArg,
+		promptArgs,
+	});
 	for (const promptArg of promptArgs) parts.push(shellEscape(promptArg));
 
 	const cdPrefix = prepared.runtimePaths.effectiveCwd
@@ -163,9 +190,20 @@ export async function launchInteractiveSubagent(
 	const launchEntryCount = existsSync(prepared.subagentSessionFile)
 		? getEntryCount(prepared.subagentSessionFile)
 		: 0;
+	clearSubagentExitSidecar(prepared.subagentSessionFile);
 	const sentinelPath = shellEscape(doneSentinelFile);
 	const exitVar = exitStatusVar();
-	const command = `trap 'printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}' EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}`;
+	const exitTrap = shellEscape(`printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}`);
+	const command = `trap ${exitTrap} EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}`;
+	traceSubagentLaunch("interactive.send", {
+		id,
+		name: params.name,
+		surface,
+		sessionFile: prepared.subagentSessionFile,
+		doneSentinelFile,
+		commandParts: parts,
+		envKeys: Object.keys(envVars).sort(),
+	});
 	sendShellCommand(surface, command);
 	if (!existsSync(prepared.subagentSessionFile)) {
 		await writeSubagentLaunchMetadataEntryWhenReady(prepared.subagentSessionFile, launchMetadata);

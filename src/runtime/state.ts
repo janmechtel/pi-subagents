@@ -130,17 +130,11 @@ export function withSubagentBatchStop<T extends AgentToolResult<unknown>>(
 	};
 }
 
-function getModuleAbortSignal(): AbortSignal {
-	return moduleAbortController.signal;
-}
-
 export function getWatcherSignal(
-	running: RunningSubagent,
+	_running: RunningSubagent,
 	watcherAbort: AbortController,
 ): AbortSignal {
-	return running.parentClosePolicy === "continue"
-		? watcherAbort.signal
-		: AbortSignal.any([watcherAbort.signal, getModuleAbortSignal()]);
+	return watcherAbort.signal;
 }
 
 export function resetRuntimeStateForTest(

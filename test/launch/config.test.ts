@@ -10,6 +10,7 @@ import {
 	buildShellChangeDirectoryPrefixForTest,
 	buildSkillLaunchPlanForTest,
 	getFlagsLaunchArgs,
+	getBaseSubagentEnvVarsForTest,
 	getNoSessionSeedModeForTest,
 	getPiInvocationForTest,
 	getPiShellPartsForTest,
@@ -29,6 +30,9 @@ import {
 	createTestDir,
 	createSessionFile,
 	getAgentConfigDirForTest,
+	isInitialPromptInvocationForTest,
+	isOneShotPromptInvocationForTest,
+	shouldForceSynchronousLaunchForTest,
 } from "../support/index.ts";
 
 describe("agent launch configuration", () => {
@@ -39,6 +43,20 @@ describe("agent launch configuration", () => {
 	it("uses PI_CODING_AGENT_DIR for the global agent config root", () => {
 		process.env.PI_CODING_AGENT_DIR = "/tmp/custom-agent-root";
 		assert.equal(getAgentConfigDirForTest(), "/tmp/custom-agent-root");
+	});
+
+	it("forces synchronous child launches for one-shot and startup-prompt parent invocations", () => {
+		const printArgv = ["node", "pi", "-p", "task"];
+		const startupPromptArgv = ["node", "pi", "--model", "deepseek", "task"];
+		assert.equal(isOneShotPromptInvocationForTest(printArgv), true);
+		assert.equal(isOneShotPromptInvocationForTest(["node", "pi", "--print", "task"]), true);
+		assert.equal(isOneShotPromptInvocationForTest(["node", "pi", "--mode", "json", "task"]), true);
+		assert.equal(isOneShotPromptInvocationForTest(startupPromptArgv), false);
+		assert.equal(isInitialPromptInvocationForTest(startupPromptArgv), true);
+		assert.equal(isInitialPromptInvocationForTest(["node", "pi"]), false);
+		assert.equal(shouldForceSynchronousLaunchForTest(true, printArgv), true);
+		assert.equal(shouldForceSynchronousLaunchForTest(true, startupPromptArgv), true);
+		assert.equal(shouldForceSynchronousLaunchForTest(false, ["node", "pi", "task"]), true);
 	});
 
 	it("parses getFlagsLaunchArgs from a flags string", () => {
@@ -262,6 +280,13 @@ describe("agent launch configuration", () => {
 		assert.equal(env.PI_PACKAGE_DIR, "/tmp/pi-package");
 		assert.equal(env.PI_CODING_AGENT_DIR, "/tmp/project/.pi/agent");
 		assert.equal(env.PI_SUBAGENT_NAME, "x");
+	});
+
+	it("clears inherited package-dir override for child launches", () => {
+		process.env.PI_PACKAGE_DIR = "/tmp/pi-package";
+		const env = getBaseSubagentEnvVarsForTest(null);
+
+		assert.equal(env.PI_PACKAGE_DIR, "");
 	});
 
 	it("loads global agent defaults from PI_CODING_AGENT_DIR and records cwd base", () => {

@@ -562,6 +562,40 @@ describe("ambient agents and runtime paths", () => {
 		assert.equal(entries.parentSession, parent);
 	});
 
+	it("writes generated child session titles when seeding session headers", () => {
+		const dir = createTestDir();
+		const parent = join(dir, "parent.jsonl");
+		const child = join(dir, "child.jsonl");
+		writeFileSync(parent, `${JSON.stringify(SESSION_HEADER)}\n`);
+
+		seedSubagentSessionFileForTest("lineage-only", parent, child, dir, {
+			sessionName: "[reviewer agent] Review sync resume blocking fix",
+		});
+
+		const header = JSON.parse(readFileSync(child, "utf8").split("\n")[0]);
+		assert.equal(header.name, "[reviewer agent] Review sync resume blocking fix");
+		assert.equal(header.parentSession, parent);
+	});
+
+	it("writes generated child session titles into forked session headers", () => {
+		const dir = createTestDir();
+		const parent = join(dir, "parent.jsonl");
+		const child = join(dir, "child.jsonl");
+		writeFileSync(
+			parent,
+			`${[SESSION_HEADER, MODEL_CHANGE].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+		);
+
+		seedSubagentSessionFileForTest("fork", parent, child, dir, {
+			childContextWindow: 100_000,
+			sessionName: "[reviewer agent] Gilfoyle-level review of all changes",
+		});
+
+		const header = JSON.parse(readFileSync(child, "utf8").split("\n")[0]);
+		assert.equal(header.name, "[reviewer agent] Gilfoyle-level review of all changes");
+		assert.equal(header.parentSession, parent);
+	});
+
 	it("throws for fork seeding without a known child context window", () => {
 		const dir = createTestDir();
 		const parent = join(dir, "parent.jsonl");

@@ -28,6 +28,7 @@ export interface PersistedSubagentLaunchMetadata {
 	timestamp: string;
 	name: string;
 	title?: string;
+	sessionTitle?: string;
 	agent?: string;
 	mode: ResumeMode;
 	sessionMode: SubagentSessionMode;
@@ -81,6 +82,7 @@ function writeHeaderOnlySubagentSessionFile(
 	childSessionFile: string,
 	cwd = process.cwd(),
 	parentSessionFile?: string,
+	sessionName?: string,
 ): void {
 	if (existsSync(childSessionFile)) return;
 	mkdirSync(dirname(childSessionFile), { recursive: true });
@@ -92,6 +94,7 @@ function writeHeaderOnlySubagentSessionFile(
 			id: randomUUID(),
 			timestamp: new Date().toISOString(),
 			cwd,
+			...(sessionName ? { name: sessionName } : {}),
 			...(parentSessionFile ? { parentSession: parentSessionFile } : {}),
 		})}\n`,
 		"utf8",
@@ -104,10 +107,11 @@ export function seedSubagentSessionFile(
 	childSessionFile: string,
 	cwd = process.cwd(),
 	/** When provided, trims the forked session to fit within the child's context window. */
-	forkTrimOptions?: {
-		childContextWindow: number;
+	seedOptions?: {
+		childContextWindow?: number;
 		reserveTokens?: number;
 		launchToolCallId?: string;
+		sessionName?: string;
 	},
 ): void {
 	void cwd;
@@ -117,12 +121,12 @@ export function seedSubagentSessionFile(
 	// writeSubagentLaunchMetadataEntryWhenReady fallback writes a header that
 	// the child then duplicates when Pi starts.
 	if (mode === "lineage-only") {
-		writeHeaderOnlySubagentSessionFile(childSessionFile, cwd, parentSessionFile);
+		writeHeaderOnlySubagentSessionFile(childSessionFile, cwd, parentSessionFile, seedOptions?.sessionName);
 		return;
 	}
 
 	if (mode === "fork") {
-		if (!forkTrimOptions) {
+		if (!seedOptions?.childContextWindow) {
 			throw new Error(
 				"Cannot fork subagent session: child model context window is unknown.",
 			);
@@ -130,7 +134,12 @@ export function seedSubagentSessionFile(
 		writeTrimmedForkSession(
 			parentSessionFile,
 			childSessionFile,
-			forkTrimOptions,
+			{
+				childContextWindow: seedOptions.childContextWindow,
+				...(seedOptions.reserveTokens !== undefined ? { reserveTokens: seedOptions.reserveTokens } : {}),
+				...(seedOptions.launchToolCallId ? { launchToolCallId: seedOptions.launchToolCallId } : {}),
+				...(seedOptions.sessionName ? { sessionName: seedOptions.sessionName } : {}),
+			},
 		);
 		return;
 	}
@@ -224,7 +233,7 @@ export async function writeSubagentLaunchMetadataEntryWhenReady(
 		writeSubagentLaunchMetadataEntry(path, metadata);
 		return;
 	}
-	writeHeaderOnlySubagentSessionFile(path, metadata.cwd);
+	writeHeaderOnlySubagentSessionFile(path, metadata.cwd, undefined, metadata.sessionTitle);
 	writeSubagentLaunchMetadataEntry(path, metadata);
 }
 
@@ -300,10 +309,11 @@ export function resolveTaskSessionMode(
 export function buildPiPromptArgs(
 	skills: string[],
 	taskArg: string,
-	directTask: boolean,
+	_directTask: boolean,
 ): string[] {
 	const skillPrompts = skills.map((skill) => `/skill:${skill}`);
-	const needsSeparator = !directTask && skillPrompts.length > 0;
+	const isArtifactTask = taskArg.startsWith("@");
+	const needsSeparator = isArtifactTask && skillPrompts.length > 0;
 	return [...(needsSeparator ? [""] : []), ...skillPrompts, taskArg];
 }
 

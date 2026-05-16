@@ -14,6 +14,7 @@ import { wrapPlainText } from "../../src/tools/overlay/render-helpers.ts";
 
 const testRuntime = {
 	getShellReadyDelayMs: () => 800,
+	waitForInteractivePrompt: async () => {},
 	isMuxAvailable: () => false,
 	watchBackgroundSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
 	watchSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
@@ -397,6 +398,7 @@ describe("subagents-view overlay", () => {
 
 const mockRuntime = {
 	getShellReadyDelayMs: () => 800,
+	waitForInteractivePrompt: async () => {},
 	isMuxAvailable: () => false,
 	watchBackgroundSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
 	watchSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),

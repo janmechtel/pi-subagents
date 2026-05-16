@@ -240,6 +240,68 @@ describe("subagent-done.ts", () => {
 	});
 
 	describe("caller_ping extension tools", () => {
+		it("writes done sidecars on shutdown for all child lifecycle modes", () => {
+			const cases = [
+				{ name: "interactive auto-exit", autoExit: true, surface: "pane-1" },
+				{ name: "interactive manual", autoExit: false, surface: "pane-1" },
+				{ name: "background auto-exit", autoExit: true, surface: undefined },
+				{ name: "background manual", autoExit: false, surface: undefined },
+			];
+
+			const originalSession = process.env.PI_SUBAGENT_SESSION;
+			const originalAutoExit = process.env.PI_SUBAGENT_AUTO_EXIT;
+			const originalSurface = process.env.PI_SUBAGENT_SURFACE;
+			const dir = createTestDir();
+
+			try {
+				for (const testCase of cases) {
+					const tools = new Map<string, any>();
+					const handlers = new Map<string, any>();
+					const sessionFile = join(dir, `${testCase.name.replace(/\s/g, "-")}.jsonl`);
+					writeFileSync(sessionFile, "");
+
+					process.env.PI_SUBAGENT_SESSION = sessionFile;
+					if (testCase.autoExit) process.env.PI_SUBAGENT_AUTO_EXIT = "1";
+					else delete process.env.PI_SUBAGENT_AUTO_EXIT;
+					if (testCase.surface) process.env.PI_SUBAGENT_SURFACE = testCase.surface;
+					else delete process.env.PI_SUBAGENT_SURFACE;
+
+					subagentDoneExtension({
+						getAllTools: () => [],
+						getActiveTools: () => [],
+						setActiveTools() {},
+						registerTool(definition: { name: string }) {
+							tools.set(definition.name, definition);
+							return definition;
+						},
+						on(event: string, handler: any) {
+							handlers.set(event, handler);
+						},
+						registerShortcut() {},
+					} as any);
+
+					handlers.get("message_end")?.({
+						message: { role: "assistant", usage: { output: 23 } },
+					});
+					handlers.get("session_shutdown")?.();
+
+					assert.deepEqual(
+						JSON.parse(readFileSync(`${sessionFile}.exit`, "utf8")),
+						{ type: "done", outputTokens: 23 },
+						testCase.name,
+					);
+				}
+			} finally {
+				if (originalSession == null) delete process.env.PI_SUBAGENT_SESSION;
+				else process.env.PI_SUBAGENT_SESSION = originalSession;
+				if (originalAutoExit == null) delete process.env.PI_SUBAGENT_AUTO_EXIT;
+				else process.env.PI_SUBAGENT_AUTO_EXIT = originalAutoExit;
+				if (originalSurface == null) delete process.env.PI_SUBAGENT_SURFACE;
+				else process.env.PI_SUBAGENT_SURFACE = originalSurface;
+				rmSync(dir, { recursive: true, force: true });
+			}
+		});
+
 		it("registers caller_ping and writes a ping exit sidecar", async () => {
 			const tools = new Map<string, any>();
 			const handlers = new Map<string, any>();

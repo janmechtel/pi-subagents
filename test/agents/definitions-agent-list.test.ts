@@ -88,6 +88,41 @@ describe("agent definitions and catalog", () => {
 		);
 	});
 
+	it("treats extensions all as the default extension set", () => {
+		const dir = createTestDir();
+		const configDir = join(dir, "agent-root");
+		const agentsDir = join(configDir, "agents");
+		mkdirSync(agentsDir, { recursive: true });
+		writeFileSync(
+			join(agentsDir, "tester.md"),
+			`---\nname: tester\nextensions: all\n---\n\nYou are the tester.`,
+		);
+		process.env.PI_CODING_AGENT_DIR = configDir;
+
+		const defs = loadAgentDefaults("tester");
+		assert.equal(defs?.extensions, "all");
+		assert.equal(resolveSubagentExtensionsForTest(defs), undefined);
+		assert.deepEqual(
+			getExtensionLaunchArgsForTest(
+				resolveSubagentExtensionsForTest(defs),
+				"/tmp/subagent-done.ts",
+			),
+			["-e", "/tmp/subagent-done.ts"],
+		);
+	});
+
+	it("rejects legacy extensions disable aliases", () => {
+		for (const value of ["false", "off", "[]"]) {
+			assert.throws(
+				() =>
+					resolveSubagentExtensionsForTest({
+						extensions: value,
+					}),
+				/Use "all", "none", or a comma-separated extension allowlist/,
+			);
+		}
+	});
+
 	it("reads skills and inject-skills from frontmatter", () => {
 		const dir = createTestDir();
 		const configDir = join(dir, "agent-root");

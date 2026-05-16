@@ -52,6 +52,7 @@ export interface PreparedSubagentLaunch {
 	sessionFile: string | null;
 	runtimePaths: ResolvedSubagentRuntimePaths;
 	subagentSessionFile: string;
+	sessionTitle?: string;
 	denySet: Set<string>;
 	effectiveExtensions?: string[];
 	identity: string;
@@ -115,6 +116,7 @@ export async function prepareSubagentLaunch(
 			? join(tmpdir(), "pi-subagents", "sessions")
 			: runtimePaths.sessionDir,
 	);
+	const sessionTitle = buildSubagentSessionTitle(params);
 	const denySet = addToolModeDeniedNames(
 		resolveDenyTools(agentDefs),
 		effectiveTools,
@@ -142,6 +144,7 @@ export async function prepareSubagentLaunch(
 		sessionFile,
 		runtimePaths,
 		subagentSessionFile,
+		sessionTitle,
 		denySet,
 		effectiveExtensions,
 		identity,
@@ -281,6 +284,7 @@ export function buildPersistedSubagentLaunchMetadata(
 		timestamp: new Date().toISOString(),
 		name: params.name,
 		...(params.title ? { title: params.title } : {}),
+		...(prepared.sessionTitle ? { sessionTitle: prepared.sessionTitle } : {}),
 		...(params.agent ? { agent: params.agent } : {}),
 		mode,
 		sessionMode,
@@ -329,7 +333,7 @@ export function getBaseSubagentEnvVars(
 		agentDefs: AgentDefaults | null,
 	) => SubagentSessionMode,
 ): Record<string, string> {
-	const envVars: Record<string, string> = {};
+	const envVars: Record<string, string> = { PI_PACKAGE_DIR: "" };
 	if (prepared.runtimePaths.localAgentConfigDir) {
 		envVars.PI_CODING_AGENT_DIR = prepared.runtimePaths.localAgentConfigDir;
 	} else if (process.env.PI_CODING_AGENT_DIR) {
@@ -345,8 +349,7 @@ export function getBaseSubagentEnvVars(
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);
 	if (sessionMode !== "standalone")
 		if (prepared.sessionFile) envVars.PI_SUBAGENT_PARENT_SESSION = prepared.sessionFile;
-	const sessionTitle = buildSubagentSessionTitle(params);
-	if (sessionTitle) envVars.PI_SUBAGENT_SESSION_TITLE = sessionTitle;
+	if (prepared.sessionTitle) envVars.PI_SUBAGENT_SESSION_TITLE = prepared.sessionTitle;
 	envVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
 	return envVars;
 }

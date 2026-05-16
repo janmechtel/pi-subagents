@@ -34,6 +34,7 @@ import {
 	formatElapsed,
 	getLaunchedSubagentResult,
 	getShellReadyDelayMs,
+	waitForInteractivePrompt,
 	getWatcherSignal,
 	launchBackgroundSubagent,
 	launchSubagent,
@@ -66,11 +67,13 @@ import {
 	markSubagentBatchBlocking,
 	requestSubagentBatchStop,
 	resetSubagentBatchStopRequest,
+	stopAfterCurrentSubagentBatch,
 } from "./runtime/state.ts";
 import { registerSubagentCommands } from "./tools/commands.ts";
 import { registerSubagentMessageRenderers } from "./tools/message-renderers.ts";
 import { registerSubagentResumeTool } from "./tools/resume-tool.ts";
-import { registerSubagentCoreTools } from "./tools/subagent-tools.ts";
+import { markInitialPromptLaunchComplete, registerSubagentCoreTools } from "./tools/subagent-tools.ts";
+import { traceSubagentLaunch } from "./launch/trace.ts";
 import { registerSubagentsView } from "./tools/subagents-view.ts";
 export { markSubagentBatchBlocking as markSubagentBatchBlockingForTest } from "./runtime/state.ts";
 export { requestSubagentBatchStop as requestSubagentBatchStopForTest } from "./runtime/state.ts";
@@ -338,10 +341,20 @@ Your most important job is synthesis: reading sub-agent outputs, understanding t
 
 	pi.on("agent_end", () => {
 		resetSubagentBatchStopRequest();
+		markInitialPromptLaunchComplete();
 	});
 
-	// Clean up on session shutdown
-	pi.on("session_shutdown", (_event, ctx) => {
+	// Clean up on real session shutdown. Pi also emits this event for the
+	// coordinator-only turn stop after async launches; that must not kill the
+	// children that the stop was created to leave running.
+	pi.on("session_shutdown", (event, ctx) => {
+		traceSubagentLaunch("session.shutdown", {
+			coordinatorOnlyTurnStop: stopAfterCurrentSubagentBatch,
+			eventKeys: Object.keys((event ?? {}) as unknown as Record<string, unknown>),
+			running: runningSubagents.size,
+		});
+		if (stopAfterCurrentSubagentBatch) return;
+
 		moduleAbortController.abort();
 		widgetManager.reset();
 		resetSubagentBatchStopRequest();
@@ -379,6 +392,7 @@ Your most important job is synthesis: reading sub-agent outputs, understanding t
 
 	registerSubagentResumeTool(pi, shouldRegister, {
 		getShellReadyDelayMs,
+		waitForInteractivePrompt,
 		isMuxAvailable,
 		watchBackgroundSubagent,
 		watchSubagent,
@@ -397,6 +411,7 @@ Your most important job is synthesis: reading sub-agent outputs, understanding t
 
 	registerSubagentsView(pi, {
 		getShellReadyDelayMs,
+		waitForInteractivePrompt,
 		isMuxAvailable,
 		watchBackgroundSubagent,
 		watchSubagent,

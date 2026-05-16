@@ -17,6 +17,8 @@ export interface TrimmedForkSessionOptions {
 	reserveTokens?: number;
 	/** Tool call id for the subagent launch that is creating this fork. */
 	launchToolCallId?: string;
+	/** Session title to write into the forked child session header. */
+	sessionName?: string;
 }
 
 const DEFAULT_RESERVE_TOKENS = 10_000;
@@ -70,11 +72,13 @@ function readSessionEntries(sessionFile: string): ParsedEntry[] {
 function buildSessionHeader(
 	headerEntry: ParsedEntry,
 	parentSessionFile: string,
+	sessionName?: string,
 ): string {
 	return JSON.stringify({
 		...headerEntry.parsed,
 		timestamp: new Date().toISOString(),
 		parentSession: parentSessionFile,
+		...(sessionName ? { name: sessionName } : {}),
 	});
 }
 
@@ -358,9 +362,10 @@ function writeChildSession(
 	headerEntry: ParsedEntry,
 	childSessionFile: string,
 	parentSessionFile: string,
+	sessionName?: string,
 ): void {
 	mkdirSync(dirname(childSessionFile), { recursive: true });
-	const lines = [buildSessionHeader(headerEntry, parentSessionFile)];
+	const lines = [buildSessionHeader(headerEntry, parentSessionFile, sessionName)];
 	for (const entry of entries) {
 		if (entry.parsed.type !== "session") {
 			// Children never receive ambient awareness (skipped in session_start for
@@ -388,7 +393,7 @@ export function writeTrimmedForkSession(
 	const reserveTokens = options.reserveTokens ?? DEFAULT_RESERVE_TOKENS;
 	const budget = options.childContextWindow - reserveTokens;
 	if (budget <= 0) {
-		writeChildSession([], headerEntry, childSessionFile, parentSessionFile);
+		writeChildSession([], headerEntry, childSessionFile, parentSessionFile, options.sessionName);
 		return;
 	}
 
@@ -398,7 +403,7 @@ export function writeTrimmedForkSession(
 	);
 	const segment = getLatestTokenSegment(entriesBeforeLaunch, parentSessionFile);
 	if (!segment) {
-		writeChildSession([], headerEntry, childSessionFile, parentSessionFile);
+		writeChildSession([], headerEntry, childSessionFile, parentSessionFile, options.sessionName);
 		return;
 	}
 
@@ -413,5 +418,6 @@ export function writeTrimmedForkSession(
 		headerEntry,
 		childSessionFile,
 		parentSessionFile,
+		options.sessionName,
 	);
 }

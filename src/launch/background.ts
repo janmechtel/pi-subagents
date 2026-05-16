@@ -36,6 +36,7 @@ import { writeTaskArtifact } from "./prompt-artifacts.ts";
 import { getSubagentDisplayTitle } from "../agents/titles.ts";
 import { getSubagentToolLaunchArgs } from "../tools/policy.ts";
 import { buildPersistedSubagentLaunchMetadata } from "./prep.ts";
+import { clearSubagentExitSidecar } from "../session/exit-sidecar.ts";
 import { getEntryCount } from "../session/session.ts";
 import { CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT } from "./context-boundary.ts";
 
@@ -131,6 +132,7 @@ export async function launchBackgroundSubagent(
 	const launchEntryCount = existsSync(prepared.subagentSessionFile)
 		? getEntryCount(prepared.subagentSessionFile)
 		: 0;
+	clearSubagentExitSidecar(prepared.subagentSessionFile);
 
 	const invocation = getPiInvocation(args);
 	const child = spawn(invocation.command, invocation.args, {

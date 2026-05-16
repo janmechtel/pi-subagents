@@ -119,8 +119,13 @@ export function resolveSubagentExtensions(
 ): string[] | undefined {
 	if (!agentDefs?.extensions) return undefined;
 	const raw = agentDefs.extensions.trim().toLowerCase();
-	if (raw === "none" || raw === "false" || raw === "off" || raw === "[]")
-		return [];
+	if (raw === "all") return undefined;
+	if (raw === "none") return [];
+	if (raw === "false" || raw === "off" || raw === "[]") {
+		throw new Error(
+			`Invalid extensions value "${agentDefs.extensions}". Use "all", "none", or a comma-separated extension allowlist.`,
+		);
+	}
 	const baseDir = agentDefs.cwdBase ?? process.cwd();
 	const resolved = agentDefs.extensions
 		.split(",")

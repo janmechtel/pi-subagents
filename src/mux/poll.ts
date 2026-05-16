@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { clearSubagentExitSidecar, getSubagentExitSidecarPath } from "../session/exit-sidecar.ts";
 import { readScreenAsync } from "./io.ts";
 
 export interface PollResult {
@@ -62,13 +63,13 @@ export function interpretExitSidecar(data: any): PollResult {
 export const __pollForExitTest__ = { interpretExitSidecar };
 
 export function consumeSubagentExitSignal(sessionFile: string): PollResult | null {
-	const exitFile = `${sessionFile}.exit`;
+	const exitFile = getSubagentExitSidecarPath(sessionFile);
 	if (!existsSync(exitFile)) return null;
 
 	try {
 		const parsed = JSON.parse(readFileSync(exitFile, "utf8"));
 		if (!parsed || typeof parsed !== "object") return null;
-		rmSync(exitFile, { force: true });
+		clearSubagentExitSidecar(sessionFile);
 		return interpretExitSidecar(parsed);
 	} catch {
 		return null;

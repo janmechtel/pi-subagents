@@ -1,4 +1,5 @@
 import "./session/session.test.ts";
+import "./session/exit-sidecar.test.ts";
 import "./tools/subagent-done.test.ts";
 import "./tools/message-renderers.test.ts";
 import "./artifacts/storage.test.ts";

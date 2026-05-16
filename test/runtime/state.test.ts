@@ -1,5 +1,5 @@
 import { assert, describe, it } from "../support/index.ts";
-import { buildCompletedSubagentResult } from "../../src/runtime/state.ts";
+import { buildCompletedSubagentResult, getWatcherSignal } from "../../src/runtime/state.ts";
 import type { RunningSubagent, SubagentResult } from "../../src/types.ts";
 
 function makeRunning(overrides: Partial<RunningSubagent> = {}): RunningSubagent {
@@ -30,6 +30,19 @@ function makeResult(overrides: Partial<SubagentResult> = {}): SubagentResult {
 		...overrides,
 	};
 }
+
+describe("getWatcherSignal", () => {
+	it("is scoped to the child watcher controller", () => {
+		const watcherAbort = new AbortController();
+
+		const signal = getWatcherSignal(makeRunning(), watcherAbort);
+
+		assert.equal(signal, watcherAbort.signal);
+		assert.equal(signal.aborted, false);
+		watcherAbort.abort();
+		assert.equal(signal.aborted, true);
+	});
+});
 
 describe("getSubagentCompletionStatus (via buildCompletedSubagentResult)", () => {
 	it("returns completed when exitCode is 0 and no errorMessage", () => {

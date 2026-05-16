@@ -19,6 +19,8 @@ import { isSetTabTitleToolEnabled } from "../agents/titles.ts";
 import { formatSubagentBatchLines, formatTaskPreview, renderSubagentCompletionText } from "./message-renderers.ts";
 import { getSubagentToolsConfigError } from "./policy.ts";
 
+let initialPromptLaunchActive = isInitialPromptInvocation();
+
 const SUBAGENT_NAME_DESCRIPTION =
 	"Required machine handle for this launch. Use lower-kebab <scope>-<role>, 2-4 words, max 32 chars, matching ^[a-z][a-z0-9]*(?:-[a-z0-9]+){1,3}$; examples: auth-scout, diff-reviewer, session-tester. Do not use Title Case, spaces, underscores, generic names, or prose.";
 
@@ -115,11 +117,12 @@ async function launchOneSubagent(
 	ctx: ExtensionContext,
 	runtime: SubagentToolRuntime,
 ): Promise<RunningSubagent> {
-	const headlessAutoExit = !ctx.hasUI && agentDefs?.autoExit !== true ? true : undefined;
+	const forceSynchronousLaunch = shouldForceSynchronousLaunch(ctx.hasUI);
+	const headlessAutoExit = forceSynchronousLaunch && agentDefs?.autoExit !== true ? true : undefined;
 	const effectiveParams = enforceAgentFrontmatter(params, agentDefs);
-	// In headless mode there is no steer mechanism, so async subagent results
-	// would be lost. Force blocking to deliver the result synchronously.
-	if (!ctx.hasUI) {
+	// In print/prompt-style runs there is no durable parent turn for async steer
+	// delivery. Force blocking so the child completes before the parent exits.
+	if (forceSynchronousLaunch) {
 		effectiveParams.async = false;
 		effectiveParams.blocking = true;
 	}
@@ -152,6 +155,77 @@ async function launchOneSubagent(
 		running.completionPromise = runtime.watchBackgroundSubagent(running, runtime.getWatcherSignal(running, watcherAbort), agentDefs?.timeout);
 	}
 	return running;
+}
+
+export function isOneShotPromptInvocation(argv = process.argv): boolean {
+	for (let i = 2; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--print" || arg === "-p") return true;
+		if (arg === "--mode" && (argv[i + 1] === "json" || argv[i + 1] === "rpc")) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function hasInitialPromptArgument(argv = process.argv): boolean {
+	const optionsWithValue = new Set([
+		"--provider",
+		"--model",
+		"--api-key",
+		"--system-prompt",
+		"--append-system-prompt",
+		"--mode",
+		"--session",
+		"--fork",
+		"--session-dir",
+		"--tools",
+		"--extension",
+		"-e",
+		"--skill",
+		"--prompt-template",
+		"--theme",
+		"--thinking",
+		"--export",
+		"--list-models",
+	]);
+	for (let i = 2; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === "--") return i + 1 < argv.length;
+		if (optionsWithValue.has(arg)) {
+			i++;
+			continue;
+		}
+		if (arg.startsWith("-")) continue;
+		if (arg.startsWith("@")) continue;
+		return true;
+	}
+	return false;
+}
+
+export function isInitialPromptInvocation(argv = process.argv): boolean {
+	return !isOneShotPromptInvocation(argv) && hasInitialPromptArgument(argv);
+}
+
+export function markInitialPromptLaunchComplete(): void {
+	initialPromptLaunchActive = false;
+}
+
+export function shouldForceSynchronousLaunch(
+	hasUI: boolean,
+	argv = process.argv,
+): boolean {
+	const startupPromptActive = argv === process.argv
+		? initialPromptLaunchActive
+		: isInitialPromptInvocation(argv);
+	return !hasUI || isOneShotPromptInvocation(argv) || startupPromptActive;
+}
+
+function getToolWaitSignal(
+	running: RunningSubagent,
+	signal: AbortSignal | undefined,
+): AbortSignal | undefined {
+	return running.async === false ? undefined : signal;
 }
 
 export function registerSubagentCoreTools(
@@ -214,9 +288,14 @@ export function registerSubagentCoreTools(
 				runtime.wireSubagentSteerBack(pi, running, running.completionPromise!);
 			}
 			runtime.startWidgetRefresh();
-			if (launched.length === 1) return runtime.getLaunchedSubagentResult(launched[0], signal);
+			if (launched.length === 1) {
+				return runtime.getLaunchedSubagentResult(
+					launched[0],
+					getToolWaitSignal(launched[0], signal),
+				);
+			}
 
-			const results = await Promise.all(launched.map((running) => runtime.getLaunchedSubagentResult(running, signal)));
+			const results = await Promise.all(launched.map((running) => runtime.getLaunchedSubagentResult(running, getToolWaitSignal(running, signal))));
 			const texts = results.flatMap((result) => result.content).filter((block) => block.type === "text").map((block) => block.text);
 			return asSubagentToolResult({
 				content: [{ type: "text", text: texts.join("\n\n") }],

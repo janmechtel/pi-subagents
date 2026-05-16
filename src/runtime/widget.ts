@@ -153,8 +153,7 @@ export class SubagentWidgetManager {
 			this.refreshRunningSubagentState(agent);
 		}
 
-		this.ensureWidgetRegistered();
-		this.widgetTui?.requestRender?.();
+		this.renderWidgetNow();
 
 		if (![...this.getAgents()].length && this.widgetInterval) {
 			clearInterval(this.widgetInterval);
@@ -456,6 +455,18 @@ export class SubagentWidgetManager {
 
 		return lines.map(
 			(line) => `${leftPadding}${truncateToWidth(line, contentWidth)}`,
+		);
+	}
+
+	private renderWidgetNow(): void {
+		if (!this.latestCtx?.hasUI) return;
+		const theme = this.latestCtx.ui.theme as WidgetThemeLike;
+		const tui = this.widgetTui ?? ({ terminal: { columns: 80 } } as WidgetTuiLike);
+		const lines = this.renderSubagentWidget(tui, theme);
+		this.latestCtx.ui.setWidget(
+			"subagent-status",
+			lines.length ? lines : undefined,
+			{ placement: "aboveEditor" },
 		);
 	}
 
