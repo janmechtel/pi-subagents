@@ -9,7 +9,7 @@ import {
 	resolveSubagentBlocking,
 	resolveSubagentNoSession,
 } from "../launch/policy.ts";
-import type { SubagentLaunchContext } from "../launch/prep.ts";
+import { normalizeModelRef, type SubagentLaunchContext } from "../launch/prep.ts";
 import { isMuxAvailable, renameCurrentTab, renameWorkspace } from "../mux.ts";
 import { findRunningSubagent } from "../runtime/running-registry.ts";
 import type { RunningSubagent, SubagentParamsInput, SubagentResult } from "../types.ts";
@@ -116,6 +116,7 @@ async function launchOneSubagent(
 	agentDefs: AgentDefaults | null,
 	ctx: ExtensionContext,
 	runtime: SubagentToolRuntime,
+	pi: ExtensionAPI,
 ): Promise<RunningSubagent> {
 	const forceSynchronousLaunch = shouldForceSynchronousLaunch(ctx.hasUI);
 	const headlessAutoExit = forceSynchronousLaunch && agentDefs?.autoExit !== true ? true : undefined;
@@ -127,8 +128,21 @@ async function launchOneSubagent(
 		effectiveParams.blocking = true;
 	}
 	const isBackground = effectiveParams.background ?? agentDefs?.mode === "background";
-	const childModelRef = effectiveParams.model ?? agentDefs?.model;
+
+	// Inherit parent model/thinking when agent frontmatter doesn't define them.
+	// This mirrors the same fallback in prepareSubagentLaunch so that
+	// childModelRef and childModelContextWindow are accurate here (needed for
+	// fork context-window validation and seed-child-session trimming).
+	const parentModelRef = ctx.model
+		? `${ctx.model.provider}/${ctx.model.id}`
+		: undefined;
+	const parentThinking = pi.getThinkingLevel() as string;
+	const { effectiveModelRef: childModelRef } = normalizeModelRef(
+		agentDefs?.model ?? parentModelRef,
+		agentDefs?.thinking ?? parentThinking,
+	);
 	const childModelContextWindow = resolveModelContextWindow(ctx, childModelRef);
+
 	const effectiveSessionMode = runtime.resolveEffectiveSessionMode(effectiveParams, agentDefs);
 	const effectiveNoSession = resolveSubagentNoSession(agentDefs);
 	const effectiveSeedMode = effectiveNoSession ? getNoSessionSeedMode(effectiveSessionMode as never) : effectiveSessionMode === "standalone" ? null : effectiveSessionMode;
@@ -136,7 +150,15 @@ async function launchOneSubagent(
 		const err = getUnknownForkContextWindowError(effectiveParams.agent, childModelRef);
 		throw new Error(err.content[0]?.text ?? "Unknown fork context window");
 	}
-	const launchCtx: SubagentLaunchContext = { sessionManager: ctx.sessionManager, cwd: ctx.cwd, childModelContextWindow, launchToolCallId: toolCallId, autoExit: headlessAutoExit };
+	const launchCtx: SubagentLaunchContext = {
+		sessionManager: ctx.sessionManager,
+		cwd: ctx.cwd,
+		childModelContextWindow,
+		launchToolCallId: toolCallId,
+		autoExit: headlessAutoExit,
+		parentModelRef,
+		parentThinking,
+	};
 	let running: RunningSubagent;
 	if (isBackground) {
 		running = await runtime.launchBackgroundSubagent(effectiveParams, launchCtx);
@@ -283,7 +305,7 @@ export function registerSubagentCoreTools(
 
 			const launched: RunningSubagent[] = [];
 			for (const entry of prepared) {
-				const running = await launchOneSubagent(toolCallId, entry.child, entry.agentDefs, ctx, runtime);
+				const running = await launchOneSubagent(toolCallId, entry.child, entry.agentDefs, ctx, runtime, pi);
 				launched.push(running);
 				runtime.wireSubagentSteerBack(pi, running, running.completionPromise!);
 			}

@@ -126,8 +126,8 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `name` | filename | Stable agent name used by `agent: "..."` |
 | `description` | unset | One-line routing hint for ambient awareness |
 | `enabled` | `true` | Set `false` to hide and block the agent |
-| `model` | Pi default | Child model, including optional thinking suffix |
-| `thinking` | model default | Child thinking level |
+| `model` | Pi default | Child model, including optional thinking suffix. When unset, the child inherits the parent's model. |
+| `thinking` | model default | Child thinking level. When unset, the child inherits the parent's thinking level. |
 | `cwd` | parent cwd | Working directory for the child |
 | `extensions` | `all` | Extension availability: `all`, `none`, or a comma-separated allowlist for the child |
 | `tools` | `all` | Built-in Pi tools: `all`, `none`, or a comma-separated subset of `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` |

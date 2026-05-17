@@ -38,6 +38,10 @@ export interface SubagentLaunchContext {
 	launchToolCallId?: string;
 	/** Override for auto-exit (used in headless mode to force auto-exit on). */
 	autoExit?: boolean;
+	/** Parent model ref to inherit when the agent frontmatter doesn't define a model. */
+	parentModelRef?: string;
+	/** Parent thinking level to inherit when the agent frontmatter doesn't define thinking. */
+	parentThinking?: string;
 }
 
 export interface PreparedSubagentLaunch {
@@ -74,6 +78,39 @@ function loadAgentDefaults(
 	);
 }
 
+/**
+ * Normalize model and thinking into a safe model ref.
+ *
+ * Handles two edge cases:
+ * 1. When the model string already carries a `:thinking` suffix (e.g.
+ *    `provider/model:high`) and an explicit thinking level is also set,
+ *    strip the embedded suffix to avoid double suffixes like `:high:low`.
+ * 2. When no model is available at all (undefined), suppress both thinking
+ *    and modelRef — persisting `undefined:<thinking>` would break resume.
+ */
+export function normalizeModelRef(
+	model: string | undefined,
+	thinking: string | undefined,
+): { effectiveModel: string | undefined; effectiveThinking: string | undefined; effectiveModelRef: string | undefined } {
+	if (!model) {
+		return { effectiveModel: undefined, effectiveThinking: undefined, effectiveModelRef: undefined };
+	}
+	// Strip any embedded :thinking suffix when we also have an explicit thinking
+	// level, so the combined ref doesn't double up: "provider/model:high:low".
+	let baseModel = model;
+	if (thinking) {
+		const idx = model.lastIndexOf(":");
+		if (idx !== -1) {
+			const suffix = model.slice(idx + 1);
+			if (["minimal", "low", "medium", "high", "xhigh"].includes(suffix)) {
+				baseModel = model.slice(0, idx);
+			}
+		}
+	}
+	const ref = thinking ? `${baseModel}:${thinking}` : baseModel;
+	return { effectiveModel: baseModel, effectiveThinking: thinking, effectiveModelRef: ref };
+}
+
 export async function prepareSubagentLaunch(
 	params: SubagentParamsInput,
 	ctx: SubagentLaunchContext,
@@ -89,14 +126,13 @@ export async function prepareSubagentLaunch(
 	if (ctx.autoExit !== undefined && agentDefs) {
 		agentDefs.autoExit = ctx.autoExit;
 	}
-	const effectiveModel = params.model ?? agentDefs?.model;
+	const { effectiveModel, effectiveThinking, effectiveModelRef } = normalizeModelRef(
+		params.model ?? agentDefs?.model ?? ctx.parentModelRef,
+		agentDefs?.thinking ?? ctx.parentThinking,
+	);
 	const effectiveTools = params.tools ?? agentDefs?.tools;
 	const effectiveSkills = params.skills ?? agentDefs?.skills;
 	const effectiveInjectSkills = agentDefs?.injectSkills;
-	const effectiveThinking = agentDefs?.thinking;
-	const effectiveModelRef = effectiveThinking
-		? `${effectiveModel}:${effectiveThinking}`
-		: effectiveModel;
 
 	const sessionFile = ctx.sessionManager.getSessionFile() ?? null;
 	// When there is no parent session file (pi --no-session), standalone

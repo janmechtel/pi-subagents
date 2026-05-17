@@ -60,6 +60,7 @@ describe("ambient agents and runtime paths", () => {
 				sendMessage(message: any) {
 					sent.push(message);
 				},
+				getThinkingLevel: () => "low" as const,
 			} as any);
 			return { handlers, sent };
 		};
@@ -130,6 +131,7 @@ describe("ambient agents and runtime paths", () => {
 				setSessionName(name: string) {
 					sessionName = name;
 				},
+				getThinkingLevel: () => "low" as const,
 			} as any);
 
 			handlers.get("session_start")(
@@ -302,6 +304,7 @@ describe("ambient agents and runtime paths", () => {
 					tools.set(definition.name, definition);
 					return definition;
 				},
+				getThinkingLevel: () => "low" as const,
 			} as any);
 
 			const tool = tools.get("subagent");
