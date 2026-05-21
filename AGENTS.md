@@ -44,7 +44,6 @@ For ordinary code changes, run:
 ```bash
 bunx tsc --noEmit
 npm test
-node --test test/session/trimmed-session.test.ts
 ```
 
 For structure/cleanup changes, also run temporary cleanup checks without adding dependencies:

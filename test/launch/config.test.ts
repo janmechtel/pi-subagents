@@ -20,7 +20,7 @@ import {
 	loadAgentDefaults,
 	readSubagentLaunchMetadataForTest,
 	resetSubagentStateForTest,
-	resolveForkOutputReserveTokensForTest,
+
 	resolveResumeLaunchMetadataForTest,
 	resolveSubagentBlockingForTest,
 	resolveSubagentNoContextFilesForTest,
@@ -370,32 +370,6 @@ describe("agent launch configuration", () => {
 			"--session",
 			"child.jsonl",
 		]);
-	});
-
-	it("reads fork output reserve tokens from agent frontmatter", () => {
-		const dir = createTestDir();
-		const configDir = join(dir, "agent-root");
-		const agentsDir = join(configDir, "agents");
-		mkdirSync(agentsDir, { recursive: true });
-		process.env.PI_CODING_AGENT_DIR = configDir;
-
-		writeFileSync(
-			join(agentsDir, "tester.md"),
-			`---\nname: tester\nfork-output-reserve-tokens: 20000\n---\n\nYou are the tester.`,
-		);
-
-		const defs = loadAgentDefaults("tester");
-		assert.equal(defs?.forkOutputReserveTokens, 20000);
-		assert.equal(resolveForkOutputReserveTokensForTest(defs), 20000);
-		assert.equal(resolveForkOutputReserveTokensForTest(null), undefined);
-
-		writeFileSync(
-			join(agentsDir, "tester.md"),
-			`---\nname: tester\nfork-output-reserve-tokens: lol\n---\n\nYou are the tester.`,
-		);
-
-		const invalid = loadAgentDefaults("tester");
-		assert.equal(invalid?.forkOutputReserveTokens, undefined);
 	});
 
 	it("parses flags frontmatter and makes it available on AgentDefaults", () => {

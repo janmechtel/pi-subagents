@@ -56,7 +56,7 @@ export {
 	resetSubagentStateForTest,
 	resolveDenyToolsForTest,
 	resolveEffectiveSessionModeForTest,
-	resolveForkOutputReserveTokensForTest,
+
 	resolveResumeLaunchMetadataForTest,
 	resolveSubagentBlockingForTest,
 	enforceAgentFrontmatterForTest,

@@ -139,7 +139,8 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `auto-exit` | `false` | Close the child after a normal completion |
 | `system-prompt` | task body | `append` uses `--append-system-prompt`; `replace` uses `--system-prompt` |
 | `session-mode` | `lineage-only` | `standalone`, `lineage-only`, or `fork` |
-| `fork-output-reserve-tokens` | `10000` | Room reserved for the child task and answer when Pi trims forked history |
+
+
 | `flags` | unset | Extra CLI flags passed to the child pi process (e.g. `--verbose` or `--some-custom-flag`). Appended after all generated args — last-wins semantics against conflicting generated args. Useful for extension-registered flags or pi built-in flags not covered by other frontmatter fields. |
 | `spawning` | `false` | Allow the child to launch subagents |
 | `async` | `true` | `false` makes the launch sync |
@@ -229,15 +230,9 @@ top-level session
 
 ### Forked sessions
 
-A fork copies the parent notebook into a new child run.
+A fork copies the entire parent session into a new child run. The child inherits all user messages, assistant responses, tool calls, and tool results from the parent transcript.
 
-Pi trims that notebook before the child sees it. It reads the parent's recorded input-token checkpoints, keeps the newest useful slice, and drops old turns until the inherited history fits inside the child model's context window.
-
-The context window is the child's total token budget for inherited history, the new task, tool chatter, and the answer it will write. If the copied parent history would exceed that budget, Pi cuts from the oldest safe point.
-
-A fork needs to know the child model's context window. Pin the agent to a registered model when Pi cannot infer it. If Pi cannot know the context window, it refuses the fork instead of guessing and overflowing the child.
-
-`fork-output-reserve-tokens` sets the part of the child context window that Pi refuses to fill with parent history. The child needs that space for the new task and its answer. A larger reserve gives the child more room to work. A smaller reserve lets it inherit more history.
+When the parent model has a larger context window than the child model, the inherited history may exceed what the child can fit. Pi handles this automatically — the child's native compaction trims inherited messages at LLM call time using the child model's actual context window and tokenizer. No manual budget configuration is needed.
 
 A fork also gets a handoff marker. Pi appends a short system-prompt note, then writes a hidden custom message with a `<subagent-boundary>` tag at the end of the copied transcript. The tag says: the old messages are background, and the next user message is the child task.
 
@@ -253,9 +248,10 @@ PI_SUBAGENT_DISABLE_CHILD_CONTEXT_BOUNDARY=1
 
 `no-session: true` gives the child a temporary session file and deletes it after completion.
 
-For `fork`, Pi seeds that temporary file with trimmed parent history. For `lineage-only`, Pi also gives the child inherited context because there is no persistent child file where it can store lineage metadata.
+For `fork`, Pi seeds that temporary file with the parent session content. For `lineage-only`, Pi also gives the child inherited context because there is no persistent child file where it can store lineage metadata.
 
 Use `no-session: true` for disposable children. Do not use it when you need resume, `caller_ping`, or durable child history.
+
 
 ## Child lifecycle
 

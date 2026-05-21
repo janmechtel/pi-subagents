@@ -5,7 +5,7 @@ import type { AgentDefaults } from "../agents/definitions.ts";
 import {
 	enforceAgentFrontmatter,
 	getSubagentAgentRequirementError,
-	getUnknownForkContextWindowError,
+
 	resolveSubagentBlocking,
 	resolveSubagentNoSession,
 } from "../launch/policy.ts";
@@ -14,7 +14,7 @@ import { isMuxAvailable, renameCurrentTab, renameWorkspace } from "../mux.ts";
 import { findRunningSubagent } from "../runtime/running-registry.ts";
 import type { RunningSubagent, SubagentParamsInput, SubagentResult } from "../types.ts";
 import { asSubagentToolResult, getCoordinatorOnlyTurnPrompt, getSubagentBatchStopMetadata, markSubagentBatchBlocking } from "../runtime/state.ts";
-import { getNoSessionSeedMode } from "../launch/seed-child-session.ts";
+
 import { isSetTabTitleToolEnabled } from "../agents/titles.ts";
 import { formatSubagentBatchLines, formatTaskPreview, renderSubagentCompletionText } from "./message-renderers.ts";
 import { getSubagentToolsConfigError } from "./policy.ts";
@@ -64,17 +64,6 @@ export interface SubagentToolRuntime {
 	getLaunchedSubagentResult(running: RunningSubagent, signal?: AbortSignal): Promise<ToolResult>;
 	stopRunningSubagent(running: RunningSubagent): void;
 	muxUnavailableResult(action: string): unknown;
-}
-
-function resolveModelContextWindow(ctx: ExtensionContext, modelRef: string | undefined) {
-	if (!modelRef || !ctx.modelRegistry) return undefined;
-	const slashIdx = modelRef.indexOf("/");
-	if (slashIdx <= 0) return undefined;
-	const provider = modelRef.slice(0, slashIdx);
-	const modelId = modelRef.slice(slashIdx + 1);
-	const candidates = [modelId, modelId.replace(/:[^:]+$/, "")].filter(Boolean);
-	const model = [...new Set(candidates)].map((c) => ctx.modelRegistry?.find(provider, c)).find(Boolean);
-	return model?.contextWindow;
 }
 
 type SubagentToolParams = Partial<SubagentParamsInput> & { children?: SubagentParamsInput[] };
@@ -136,8 +125,8 @@ async function launchOneSubagent(
 
 	// Inherit parent model/thinking when agent frontmatter doesn't define them.
 	// This mirrors the same fallback in prepareSubagentLaunch so that
-	// childModelRef and childModelContextWindow are accurate here (needed for
-	// fork context-window validation and seed-child-session trimming).
+	// childModelRef is used for the child command's --model flag.
+
 	const parentModelRef = ctx.model
 		? `${ctx.model.provider}/${ctx.model.id}`
 		: undefined;
@@ -146,19 +135,11 @@ async function launchOneSubagent(
 		agentDefs?.model ?? parentModelRef,
 		agentDefs?.thinking ?? parentThinking,
 	);
-	const childModelContextWindow = resolveModelContextWindow(ctx, childModelRef);
 
-	const effectiveSessionMode = runtime.resolveEffectiveSessionMode(effectiveParams, agentDefs);
-	const effectiveNoSession = resolveSubagentNoSession(agentDefs);
-	const effectiveSeedMode = effectiveNoSession ? getNoSessionSeedMode(effectiveSessionMode as never) : effectiveSessionMode === "standalone" ? null : effectiveSessionMode;
-	if (effectiveSeedMode === "fork" && !childModelContextWindow) {
-		const err = getUnknownForkContextWindowError(effectiveParams.agent, childModelRef);
-		throw new Error(err.content[0]?.text ?? "Unknown fork context window");
-	}
 	const launchCtx: SubagentLaunchContext = {
 		sessionManager: ctx.sessionManager,
 		cwd: ctx.cwd,
-		childModelContextWindow,
+
 		launchToolCallId: toolCallId,
 		autoExit: headlessAutoExit,
 		parentModelRef,

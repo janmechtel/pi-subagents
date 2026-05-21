@@ -3,10 +3,8 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { getArtifactStorageRoot } from "../artifact-storage.ts";
 import type { AgentDefaults } from "../agents/definitions.ts";
-import {
-	loadAgentDefaults as loadAgentDefaultsFromDefinitions,
-	resolveForkOutputReserveTokens,
-} from "../agents/definitions.ts";
+import { loadAgentDefaults as loadAgentDefaultsFromDefinitions } from "../agents/definitions.ts";
+
 import { CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT } from "./context-boundary.ts";
 import { parseCommandWords } from "./child-command.ts";
 import {
@@ -34,7 +32,7 @@ export interface SubagentLaunchContext {
 		getSessionId(): string;
 	};
 	cwd: string;
-	childModelContextWindow?: number;
+
 	launchToolCallId?: string;
 	/** Override for auto-exit (used in headless mode to force auto-exit on). */
 	autoExit?: boolean;
@@ -312,9 +310,7 @@ export function buildPersistedSubagentLaunchMetadata(
 	boundarySystemPrompt: boolean,
 	systemPrompt?: string,
 ): PersistedSubagentLaunchMetadata {
-	const forkOutputReserveTokens = resolveForkOutputReserveTokens(
-		prepared.agentDefs,
-	);
+
 	return {
 		version: 1,
 		timestamp: new Date().toISOString(),
@@ -354,9 +350,7 @@ export function buildPersistedSubagentLaunchMetadata(
 			: {}),
 		...(systemPrompt ? { systemPrompt } : {}),
 		boundarySystemPrompt,
-		...(forkOutputReserveTokens !== undefined
-			? { forkOutputReserveTokens }
-			: {}),
+
 		...(prepared.agentDefs?.flags ? { flags: prepared.agentDefs.flags } : {}),
 	};
 }
@@ -386,16 +380,7 @@ export function getBaseSubagentEnvVars(
 	if (sessionMode !== "standalone")
 		if (prepared.sessionFile) envVars.PI_SUBAGENT_PARENT_SESSION = prepared.sessionFile;
 	if (prepared.sessionTitle) envVars.PI_SUBAGENT_SESSION_TITLE = prepared.sessionTitle;
-	const forkReserveTokens = resolveForkOutputReserveTokens(prepared.agentDefs);
-	if (typeof forkReserveTokens === "number" && forkReserveTokens > 0) {
-		envVars.PI_SUBAGENT_FORK_RESERVE_TOKENS = String(forkReserveTokens);
-	}
-	if (process.env.PI_SUBAGENT_FORK_TRIM_DEBUG) {
-		envVars.PI_SUBAGENT_FORK_TRIM_DEBUG = process.env.PI_SUBAGENT_FORK_TRIM_DEBUG;
-	}
-	if (process.env.PI_SUBAGENT_FORK_TRIM_DEBUG_LOG) {
-		envVars.PI_SUBAGENT_FORK_TRIM_DEBUG_LOG = process.env.PI_SUBAGENT_FORK_TRIM_DEBUG_LOG;
-	}
+
 	envVars.PI_ARTIFACT_PROJECT_ROOT = getArtifactStorageRoot();
 	return envVars;
 }

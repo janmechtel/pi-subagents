@@ -34,23 +34,6 @@ export function getSubagentAgentRequirementError(
 	return null;
 }
 
-export function getUnknownForkContextWindowError(
-	agent: string | undefined,
-	modelRef: string | undefined,
-) {
-	return {
-		content: [
-			{
-				type: "text" as const,
-				text: modelRef
-					? `Error: cannot fork subagent${agent ? ` "${agent}"` : ""} because model "${modelRef}" has no known context window in Pi's model registry. Pin the agent to a registered model with context metadata, or use session-mode: lineage-only/standalone if it must not inherit parent context.`
-					: `Error: cannot fork subagent${agent ? ` "${agent}"` : ""} because no child model is pinned, so the runtime cannot know the child context window. Add model: <provider>/<model-id> to the agent frontmatter, or use session-mode: lineage-only/standalone if it must not inherit parent context.`,
-			},
-		],
-		details: { error: "unknown_fork_context_window", agent, model: modelRef },
-	};
-}
-
 export function getSubagentAgentOverrideError(
 	_params: Partial<SubagentParamsInput>,
 	_agentDefs: AgentDefaults | null,

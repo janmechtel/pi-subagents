@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentDefaults } from "../agents/definitions.ts";
 import type { ParentClosePolicy, SubagentParamsInput } from "../types.ts";
 import { getEntries } from "./session.ts";
-import { writeTrimmedForkSession } from "./trimmed-session.ts";
+
 
 export type SubagentSessionMode = "standalone" | "lineage-only" | "fork";
 
@@ -52,7 +52,7 @@ export interface PersistedSubagentLaunchMetadata {
 	systemPromptMode?: "append" | "replace";
 	systemPrompt?: string;
 	boundarySystemPrompt: boolean;
-	forkOutputReserveTokens?: number;
+
 	flags?: string;
 }
 
@@ -106,11 +106,8 @@ export function seedSubagentSessionFile(
 	parentSessionFile: string,
 	childSessionFile: string,
 	cwd = process.cwd(),
-	/** When provided, trims the forked session to fit within the child's context window. */
 	seedOptions?: {
-		childContextWindow?: number;
-		reserveTokens?: number;
-		launchToolCallId?: string;
+
 		sessionName?: string;
 	},
 ): void {
@@ -126,21 +123,27 @@ export function seedSubagentSessionFile(
 	}
 
 	if (mode === "fork") {
-		if (!seedOptions?.childContextWindow) {
-			throw new Error(
-				"Cannot fork subagent session: child model context window is unknown.",
-			);
+		// Raw copy: write a new header with parentSession link, then copy all
+		// non-header entries from the parent. No trimming — Pi's native
+		// compaction handles overflow at LLM call time.
+		const parentContent = readFileSync(parentSessionFile, "utf8");
+		const parentLines = parentContent.split("\n").filter((l) => l.trim());
+		const header = JSON.stringify({
+			type: "session",
+			version: 3,
+			id: randomUUID(),
+			timestamp: new Date().toISOString(),
+			cwd,
+			...(seedOptions?.sessionName ? { name: seedOptions.sessionName } : {}),
+			parentSession: parentSessionFile,
+		});
+		let out = header + "\n";
+		for (const line of parentLines) {
+			const entry = JSON.parse(line);
+			if (entry.type === "session") continue;
+			out += line + "\n";
 		}
-		writeTrimmedForkSession(
-			parentSessionFile,
-			childSessionFile,
-			{
-				childContextWindow: seedOptions.childContextWindow,
-				...(seedOptions.reserveTokens !== undefined ? { reserveTokens: seedOptions.reserveTokens } : {}),
-				...(seedOptions.launchToolCallId ? { launchToolCallId: seedOptions.launchToolCallId } : {}),
-				...(seedOptions.sessionName ? { sessionName: seedOptions.sessionName } : {}),
-			},
-		);
+		writeFileSync(childSessionFile, out, "utf8");
 		return;
 	}
 }

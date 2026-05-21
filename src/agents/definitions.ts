@@ -26,7 +26,7 @@ export interface AgentDefaults {
 	noContextFiles?: boolean;
 	noSession?: boolean;
 	timeout?: number;
-	forkOutputReserveTokens?: number;
+
 	flags?: string;
 	parentClosePolicy?: "terminate" | "continue";
 }
@@ -48,12 +48,6 @@ function parseOptionalNonNegativeInteger(
 	if (raw == null) return undefined;
 	const value = Number(raw);
 	return Number.isInteger(value) && value >= 0 ? value : undefined;
-}
-
-export function resolveForkOutputReserveTokens(
-	agentDefs: AgentDefaults | null,
-): number | undefined {
-	return agentDefs?.forkOutputReserveTokens;
 }
 
 function parseAgentDefinition(
@@ -81,7 +75,8 @@ function parseAgentDefinition(
 	const noContextFilesRaw = get("no-context-files");
 	const noSessionRaw = get("no-session");
 	const timeoutRaw = get("timeout");
-	const forkOutputReserveTokensRaw = get("fork-output-reserve-tokens");
+
+
 	const systemPromptRaw = get("system-prompt");
 	const extensionsRaw = get("extensions");
 	const injectSkillsRaw = get("inject-skills");
@@ -129,9 +124,7 @@ function parseAgentDefinition(
 				? modeRaw
 				: undefined,
 		timeout: timeoutRaw != null ? parseInt(timeoutRaw, 10) : undefined,
-		forkOutputReserveTokens: parseOptionalNonNegativeInteger(
-			forkOutputReserveTokensRaw,
-		),
+
 		flags: flagsRaw,
 		parentClosePolicy:
 			parentClosePolicyRaw === "terminate" ||

@@ -599,7 +599,7 @@ describe("ambient agents and runtime paths", () => {
 		assert.equal(header.parentSession, parent);
 	});
 
-	it("throws for fork seeding without a known child context window", () => {
+	it("seeds a fork session even when child context window is unknown", () => {
 		const dir = createTestDir();
 		const parent = join(dir, "parent.jsonl");
 		const child = join(dir, "child.jsonl");
@@ -608,10 +608,10 @@ describe("ambient agents and runtime paths", () => {
 			`${[SESSION_HEADER, MODEL_CHANGE].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
 		);
 
-		assert.throws(
-			() => seedSubagentSessionFileForTest("fork", parent, child, dir),
-			/child model context window is unknown/,
-		);
+		// No context window provided — should succeed and produce a valid child session.
+		seedSubagentSessionFileForTest("fork", parent, child, dir);
+		const header = JSON.parse(readFileSync(child, "utf8").split("\n")[0]);
+		assert.equal(header.parentSession, parent);
 	});
 
 });

@@ -1,5 +1,4 @@
 import { buildChildContextBoundary, isChildContextBoundaryDisabled } from "./context-boundary.ts";
-import { resolveForkOutputReserveTokens } from "../agents/definitions.ts";
 import type { SubagentLaunchContext, PreparedSubagentLaunch } from "./prep.ts";
 import type { SubagentParamsInput } from "../types.ts";
 import {
@@ -33,7 +32,7 @@ function shouldWriteChildContextBoundary(
 export function seedPreparedSubagentSession(
 	prepared: PreparedSubagentLaunch,
 	params: Pick<SubagentParamsInput, "name">,
-	ctx: Pick<SubagentLaunchContext, "cwd" | "childModelContextWindow" | "launchToolCallId">,
+	ctx: Pick<SubagentLaunchContext, "cwd">,
 	sessionMode: SubagentSessionMode,
 	noSession: boolean,
 ): {
@@ -42,10 +41,7 @@ export function seedPreparedSubagentSession(
 } {
 	const seedMode = getChildSeedMode(sessionMode, noSession);
 	const boundarySystemPrompt = shouldWriteChildContextBoundary(seedMode);
-	const reserveTokens = resolveForkOutputReserveTokens(prepared.agentDefs);
 	if (seedMode) {
-		// Lineage-tracked and forked children require a parent session file.
-		// If there isn't one, throw a clear error instead of crashing downstream.
 		if (!prepared.sessionFile) {
 			throw new Error(
 				`Cannot launch ${seedMode} subagent: no parent session file. ` +
@@ -53,25 +49,12 @@ export function seedPreparedSubagentSession(
 					`or start pi with a persistent session (--session or --session-dir).`,
 			);
 		}
-		const forkTrimOptions =
-			seedMode === "fork" && ctx.childModelContextWindow
-				? {
-						childContextWindow: ctx.childModelContextWindow,
-						...(reserveTokens !== undefined ? { reserveTokens } : {}),
-						...(ctx.launchToolCallId
-							? { launchToolCallId: ctx.launchToolCallId }
-							: {}),
-					}
-				: undefined;
 		seedSubagentSessionFile(
 			seedMode,
 			prepared.sessionFile,
 			prepared.subagentSessionFile,
 			prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
-			{
-				...forkTrimOptions,
-				...(prepared.sessionTitle ? { sessionName: prepared.sessionTitle } : {}),
-			},
+			prepared.sessionTitle ? { sessionName: prepared.sessionTitle } : undefined,
 		);
 		if (boundarySystemPrompt) {
 			const boundaryOptions = {

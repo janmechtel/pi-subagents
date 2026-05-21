@@ -25,7 +25,7 @@ const SECTION_FIELDS = [
 	},
 	{
 		title: "Model",
-		fields: ["model", "thinking", "fork-output-reserve"],
+		fields: ["model", "thinking"],
 	},
 	{
 		title: "Workspace",
@@ -85,14 +85,6 @@ function buildSections(
 	fields.push({ label: "parent-close", value: (meta?.parentClosePolicy ?? defs?.parentClosePolicy ?? "terminate") as string });
 	fields.push({ label: "no-session", value: String(meta ? meta.noSession : (defs?.noSession ?? false)) });
 	fields.push({ label: "timeout", value: defs?.timeout != null ? `${defs.timeout}s` : "none" });
-	fields.push({
-		label: "fork-output-reserve",
-		value: meta?.forkOutputReserveTokens != null
-			? `${meta.forkOutputReserveTokens}`
-			: defs?.forkOutputReserveTokens != null
-				? `${defs.forkOutputReserveTokens}`
-				: "10000",
-	});
 
 	return SECTION_FIELDS.map((section) => ({
 		title: section.title,

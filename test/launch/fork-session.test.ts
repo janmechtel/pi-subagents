@@ -23,7 +23,7 @@ import {
 	getEntries,
 	isMissingOptionalDependencyForTest,
 	createTestDir,
-	sleep,
+
 	createForkSessionFileForTest,
 	SESSION_HEADER,
 	MODEL_CHANGE,
@@ -36,7 +36,7 @@ describe("fork session launch behavior", () => {
 		resetSubagentStateForTest();
 	});
 
-	it("does not pre-create forked child session files without assistant context", () => {
+	it("copies parent entries even without assistant context (raw fork)", () => {
 		const dir = createTestDir();
 		const parent = join(dir, "parent.jsonl");
 		const child = join(dir, "child.jsonl");
@@ -45,16 +45,15 @@ describe("fork session launch behavior", () => {
 			`${[SESSION_HEADER, MODEL_CHANGE].map((entry) => JSON.stringify(entry)).join("\n")}\n`,
 		);
 
-		// Fork mode now requires an explicit model context window for safe trimming
-		seedSubagentSessionFileForTest("fork", parent, child, dir, {
-			childContextWindow: 1_000_000,
-		});
+		// Raw fork copies all non-header entries from parent.
 
-		// With no assistant messages, writeTrimmedForkSession writes header-only
+		seedSubagentSessionFileForTest("fork", parent, child, dir);
+
+		// Child has new header + copied model_change entry
 		assert.equal(existsSync(child), true);
 		const content = readFileSync(child, "utf-8");
 		const lines = content.split("\n").filter((l) => l.trim());
-		assert.equal(lines.length, 1, "Should have only a session header");
+		assert.equal(lines.length, 2, "Should have header + model_change");
 	});
 
 	it("does not treat fork seed assistant messages as child completion output", () => {

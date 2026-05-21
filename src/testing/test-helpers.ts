@@ -1,8 +1,6 @@
 import type { AgentDefaults } from "../agents/definitions.ts";
-import {
-	getEffectiveAgentDefinitions,
-	resolveForkOutputReserveTokens,
-} from "../agents/definitions.ts";
+import { getEffectiveAgentDefinitions } from "../agents/definitions.ts";
+
 import {
 	CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT,
 	buildChildContextBoundary,
@@ -84,12 +82,6 @@ import {
 
 export function resolveDenyToolsForTest(agentDefs: AgentDefaults | null) {
 	return resolveDenyTools(agentDefs);
-}
-
-export function resolveForkOutputReserveTokensForTest(
-	agentDefs: AgentDefaults | null,
-) {
-	return resolveForkOutputReserveTokens(agentDefs);
 }
 
 export function getEffectiveAgentDefinitionsForTest(baseCwd = process.cwd()) {
