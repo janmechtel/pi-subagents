@@ -31,13 +31,19 @@ const SUBAGENT_NAME_DESCRIPTION =
 const SUBAGENT_TITLE_DESCRIPTION =
 	"Required human title for this child session/widget. Use sentence case, 3-8 words, outcome/objective focused, and not a prompt or instruction; examples: Auth implementation map, Local diff bug review.";
 
+const SUBAGENT_MODEL_DESCRIPTION =
+	"Only set when the user explicitly requested a model for this agent launch. Format: provider/model. If the user gave provider/model:thinking, put thinking in `thinking`. Otherwise omit.";
+
+const SUBAGENT_THINKING_DESCRIPTION =
+	"Only set when the user explicitly requested a thinking level for this agent launch. Format: off|minimal|low|medium|high|xhigh. Otherwise omit.";
+
 const SubagentChildParams = Type.Object({
 	name: Type.String({ description: SUBAGENT_NAME_DESCRIPTION }),
 	task: Type.String({ description: "Task/prompt for the sub-agent. For non-trivial work, write readable Markdown: short paragraphs, bullets, or headings as appropriate. Use a one-line task only for trivial work." }),
 	title: Type.String({ description: SUBAGENT_TITLE_DESCRIPTION }),
 	agent: Type.String({ description: "Required agent definition name. Reads .pi/agents/<name>.md or ~/.pi/agent/agents/<name>.md and refuses ad-hoc unnamed subagents." }),
-	model: Type.Optional(Type.String({ description: "Optional provider/model[:thinking] to run this child with. Honored by default; ignored only when the agent definition sets allow-model-override: false." })),
-	thinking: Type.Optional(Type.String({ description: "Optional thinking level for this child. Honored by default; ignored only when the agent definition sets allow-model-override: false." })),
+	model: Type.Optional(Type.String({ description: SUBAGENT_MODEL_DESCRIPTION })),
+	thinking: Type.Optional(Type.String({ description: SUBAGENT_THINKING_DESCRIPTION })),
 });
 
 const SubagentParams = Type.Object({
@@ -45,8 +51,8 @@ const SubagentParams = Type.Object({
 	task: Type.Optional(Type.String({ description: "Task/prompt for a single sub-agent. For non-trivial work, write readable Markdown: short paragraphs, bullets, or headings as appropriate. Use a one-line task only for trivial work." })),
 	title: Type.Optional(Type.String({ description: SUBAGENT_TITLE_DESCRIPTION })),
 	agent: Type.Optional(Type.String({ description: "Required agent definition name for a single subagent launch." })),
-	model: Type.Optional(Type.String({ description: "Optional provider/model[:thinking] to run this child with. Honored by default; ignored only when the agent definition sets allow-model-override: false." })),
-	thinking: Type.Optional(Type.String({ description: "Optional thinking level for this child. Honored by default; ignored only when the agent definition sets allow-model-override: false." })),
+	model: Type.Optional(Type.String({ description: SUBAGENT_MODEL_DESCRIPTION })),
+	thinking: Type.Optional(Type.String({ description: SUBAGENT_THINKING_DESCRIPTION })),
 	children: Type.Optional(Type.Array(SubagentChildParams, { description: "Spawn multiple children in one deterministic launch. Use this instead of multiple separate subagent tool calls when a user asks for more than one agent." })),
 });
 const SubagentKillParams = Type.Object({ id: Type.String({ description: "Running subagent id or display name to stop" }) });
