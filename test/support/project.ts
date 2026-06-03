@@ -81,6 +81,7 @@ export {
 	shouldReapStableTerminalSummaryForTest,
 	shutdownSubagentsForTest,
 	waitForSubagentForTest,
+	writeResumeTaskArtifactForTest,
 	writeSubagentLaunchMetadataEntryForTest,
 	writeSubagentModelStateEntriesForTest,
 	writeSystemPromptArtifactForTest,
