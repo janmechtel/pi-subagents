@@ -146,7 +146,7 @@ For a fuller example of the intended style, see the [scout agent gist by edxeth]
 | `inject-skills` | unset | Comma-separated skills to load into the child prompt before the task |
 | `no-context-files` | `false` | Skip trusted project context-file discovery in the child. With the default `trust-project: false`, Pi already ignores project-local context files. |
 | `no-session` | `false` | Use an ephemeral child session file and delete it after completion |
-| `trust-project` | `false` | Whether interactive child launches pass Pi's `--approve` flag and trust project-local files/settings. Background children always generate `--no-approve` for safety; use `flags` only as an explicit advanced override. Requires Pi 0.79.0 or newer. |
+| `trust-project` | `false` | Whether interactive child launches pass Pi's `--approve` flag and trust project-local files/settings. Background children always generate `--no-approve` for safety; use `flags` only as an explicit advanced override. |
 | `auto-exit` | `false` | Close the child after a normal completion |
 | `system-prompt` | task body | `append` uses `--append-system-prompt`; `replace` uses `--system-prompt` |
 | `session-mode` | `lineage-only` | `standalone`, `lineage-only`, or `fork` |
