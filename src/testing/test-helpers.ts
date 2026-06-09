@@ -15,8 +15,10 @@ import {
 import { parseEnvString } from "../launch/env.ts";
 import {
 	buildPersistedSubagentLaunchMetadata,
+	getApprovalLaunchArgs,
 	getBaseSubagentEnvVars,
 	getExtensionLaunchArgs,
+	getPersistedApprovalLaunchArgs,
 	getPersistedSessionParityArgs,
 	getPreparedSessionLaunchArgs,
 	resolveAvailableModelRef,
@@ -241,8 +243,9 @@ export function buildPersistedSubagentLaunchMetadataForTest(
 
 export function getPersistedSessionParityArgsForTest(
 	metadata: PersistedSubagentLaunchMetadata | undefined,
+	modeOverride?: ResumeMode,
 ) {
-	return getPersistedSessionParityArgs(metadata);
+	return getPersistedSessionParityArgs(metadata, modeOverride);
 }
 
 export function resolveResumeLaunchMetadataForInvocationForTest(
@@ -400,6 +403,20 @@ export function getExtensionLaunchArgsForTest(
 export function getFlagsLaunchArgs(flags: string | undefined) {
 	if (!flags?.trim()) return [];
 	return parseCommandWords(flags);
+}
+
+export function getApprovalLaunchArgsForTest(
+	agentDefs: Pick<AgentDefaults, "trustProject"> | null | undefined,
+	mode: ResumeMode,
+) {
+	return getApprovalLaunchArgs(agentDefs, mode);
+}
+
+export function getPersistedApprovalLaunchArgsForTest(
+	metadata: Pick<PersistedSubagentLaunchMetadata, "trustProject"> | undefined,
+	mode: ResumeMode,
+) {
+	return getPersistedApprovalLaunchArgs(metadata, mode);
 }
 
 export function parseEnvStringForTest(env: string | undefined) {

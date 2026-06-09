@@ -32,6 +32,7 @@ describe("launch coordinator", () => {
 				"deny-tools: bash",
 				"skills: none",
 				"extensions: none",
+				"trust-project: true",
 				"---",
 				"You scout the codebase.",
 			].join("\n"),
@@ -70,6 +71,7 @@ describe("launch coordinator", () => {
 		assert.equal(launch.launchMetadata.mode, "background");
 		assert.equal(launch.launchMetadata.sessionMode, "fork");
 		assert.equal(launch.launchMetadata.modelRef, "provider/model:high");
+		assert.equal(launch.launchMetadata.trustProject, true);
 		assert.equal(launch.envVars.PI_SUBAGENT_SESSION, launch.prepared.subagentSessionFile);
 		assert.equal(launch.envVars.PI_SUBAGENT_AUTO_EXIT, "1");
 		assert.deepEqual(launch.envVars.PI_DENY_TOOLS.split(",").sort(), [

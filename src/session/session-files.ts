@@ -56,6 +56,7 @@ export interface PersistedSubagentLaunchMetadata {
 	extensions?: string[];
 	noContextFiles: boolean;
 	noSession: boolean;
+	trustProject?: boolean;
 	agentConfigDir: string;
 	cwd: string;
 	systemPromptMode?: "append" | "replace";

@@ -36,6 +36,8 @@ import {
 	createSessionFile,
 	enforceAgentFrontmatterForTest,
 	getAgentConfigDirForTest,
+	getApprovalLaunchArgsForTest,
+	getPersistedApprovalLaunchArgsForTest,
 	isInitialPromptInvocationForTest,
 	isOneShotPromptInvocationForTest,
 	shouldForceSynchronousLaunchForTest,
@@ -49,6 +51,22 @@ describe("agent launch configuration", () => {
 	it("uses PI_CODING_AGENT_DIR for the global agent config root", () => {
 		process.env.PI_CODING_AGENT_DIR = "/tmp/custom-agent-root";
 		assert.equal(getAgentConfigDirForTest(), "/tmp/custom-agent-root");
+	});
+
+	it("parses trust-project frontmatter", () => {
+		const dir = createTestDir();
+		mkdirSync(join(dir, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(dir, ".pi", "agents", "trusted.md"),
+			"---\nname: trusted\ntrust-project: true\n---\nReview things.",
+		);
+		writeFileSync(
+			join(dir, ".pi", "agents", "untrusted.md"),
+			"---\nname: untrusted\ntrust-project: false\n---\nReview things.",
+		);
+
+		assert.equal(loadAgentDefaults("trusted", undefined, dir)?.trustProject, true);
+		assert.equal(loadAgentDefaults("untrusted", undefined, dir)?.trustProject, false);
 	});
 
 	it("parses allow-model-override frontmatter", () => {
@@ -88,7 +106,7 @@ describe("agent launch configuration", () => {
 	it("persists effective launch model override metadata", () => {
 		const metadata = buildPersistedSubagentLaunchMetadataForTest(
 			{
-				agentDefs: {},
+				agentDefs: { trustProject: true },
 				effectiveModel: "provider/requested",
 				effectiveThinking: "high",
 				effectiveModelRef: "provider/requested:high",
@@ -111,6 +129,7 @@ describe("agent launch configuration", () => {
 
 		assert.equal(metadata.allowModelOverride, true);
 		assert.equal(metadata.modelSource, "launch-override");
+		assert.equal(metadata.trustProject, true);
 		assert.equal(metadata.requestedModelOverride, "provider/requested:high");
 		assert.equal(metadata.modelRef, "provider/requested:high");
 	});
@@ -174,6 +193,7 @@ describe("agent launch configuration", () => {
 		assert.deepEqual(await getPersistedSessionParityArgsForTest(overridden), [
 			"--model",
 			"provider/requested:high",
+			"--no-approve",
 		]);
 	});
 
@@ -215,6 +235,7 @@ describe("agent launch configuration", () => {
 		assert.deepEqual(await getPersistedSessionParityArgsForTest(overridden), [
 			"--model",
 			"zai-messages/glm-5-turbo",
+			"--no-approve",
 		]);
 	});
 
@@ -255,6 +276,7 @@ describe("agent launch configuration", () => {
 		assert.deepEqual(await getPersistedSessionParityArgsForTest(overridden), [
 			"--model",
 			"zai-messages/glm-5-turbo:off",
+			"--no-approve",
 		]);
 	});
 
@@ -365,6 +387,57 @@ describe("agent launch configuration", () => {
 			"--plan",
 			"arg with spaces",
 		]);
+	});
+
+	it("defaults child approval to no-approve unless interactive frontmatter trusts the project", () => {
+		assert.deepEqual(getApprovalLaunchArgsForTest(undefined, "interactive"), [
+			"--no-approve",
+		]);
+		assert.deepEqual(
+			getApprovalLaunchArgsForTest({ trustProject: true }, "interactive"),
+			["--approve"],
+		);
+		assert.deepEqual(
+			getApprovalLaunchArgsForTest({ trustProject: true }, "background"),
+			["--no-approve"],
+		);
+	});
+
+	it("restores persisted approval policy for resume with background safety", () => {
+		assert.deepEqual(
+			getPersistedApprovalLaunchArgsForTest({ trustProject: true }, "interactive"),
+			["--approve"],
+		);
+		assert.deepEqual(
+			getPersistedApprovalLaunchArgsForTest({ trustProject: true }, "background"),
+			["--no-approve"],
+		);
+		assert.deepEqual(getPersistedApprovalLaunchArgsForTest(undefined, "interactive"), [
+			"--no-approve",
+		]);
+	});
+
+	it("keeps approval args before persisted flags so flags remain the escape hatch", async () => {
+		assert.deepEqual(
+			await getPersistedSessionParityArgsForTest({
+				version: 1,
+				timestamp: "2026-05-08T00:00:00.000Z",
+				name: "trusted-child",
+				mode: "interactive",
+				sessionMode: "lineage-only",
+				parentClosePolicy: "terminate",
+				async: true,
+				trustProject: false,
+				denyTools: [],
+				noContextFiles: false,
+				noSession: false,
+				agentConfigDir: "/tmp",
+				cwd: "/tmp",
+				boundarySystemPrompt: true,
+				flags: "--approve",
+			}),
+			["--no-approve", "--approve"],
+		);
 	});
 
 	it("builds no skill launch args when skills are all", async () => {

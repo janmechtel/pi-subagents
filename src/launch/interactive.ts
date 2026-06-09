@@ -10,6 +10,7 @@ import {
 	getPreparedRoleBlock,
 	getPreparedSessionLaunchArgs,
 	getPreparedSkillInjection,
+	getApprovalLaunchArgs,
 	getPreparedSkillLaunchArgs,
 	getPreparedSkillList,
 	getFlagsLaunchArgs,
@@ -121,6 +122,9 @@ export async function launchInteractiveSubagent(
 	}
 	if (launch.boundarySystemPrompt) {
 		parts.push("--append-system-prompt", shellEscape(CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT));
+	}
+	for (const arg of getApprovalLaunchArgs(prepared.agentDefs, "interactive")) {
+		parts.push(shellEscape(arg));
 	}
 	for (const arg of getSubagentToolLaunchArgs(prepared.effectiveTools, prepared.denySet)) {
 		parts.push(shellEscape(arg));

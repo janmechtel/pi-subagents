@@ -26,6 +26,7 @@ export interface AgentDefaults {
 	blocking?: boolean;
 	noContextFiles?: boolean;
 	noSession?: boolean;
+	trustProject?: boolean;
 	timeout?: number;
 
 	flags?: string;
@@ -83,6 +84,7 @@ function parseAgentDefinition(
 	const blockingRaw = get("blocking");
 	const noContextFilesRaw = get("no-context-files");
 	const noSessionRaw = get("no-session");
+	const trustProjectRaw = get("trust-project");
 	const timeoutRaw = get("timeout");
 
 
@@ -132,6 +134,8 @@ function parseAgentDefinition(
 		noContextFiles:
 			noContextFilesRaw != null ? noContextFilesRaw === "true" : undefined,
 		noSession: noSessionRaw != null ? noSessionRaw === "true" : undefined,
+		trustProject:
+			trustProjectRaw != null ? trustProjectRaw === "true" : undefined,
 		mode:
 			modeRaw === "background" || modeRaw === "interactive"
 				? modeRaw

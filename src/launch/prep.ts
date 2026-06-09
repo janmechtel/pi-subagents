@@ -197,6 +197,22 @@ export function getFlagsLaunchArgs(flags: string | undefined): string[] {
 	return parseCommandWords(flags);
 }
 
+export function getApprovalLaunchArgs(
+	agentDefs: Pick<AgentDefaults, "trustProject"> | null | undefined,
+	mode: ResumeMode,
+): string[] {
+	if (mode === "background") return ["--no-approve"];
+	return agentDefs?.trustProject === true ? ["--approve"] : ["--no-approve"];
+}
+
+export function getPersistedApprovalLaunchArgs(
+	metadata: Pick<PersistedSubagentLaunchMetadata, "trustProject"> | undefined,
+	mode: ResumeMode,
+): string[] {
+	if (mode === "background") return ["--no-approve"];
+	return metadata?.trustProject === true ? ["--approve"] : ["--no-approve"];
+}
+
 
 export function getPreparedExtensionLaunchArgs(
 	prepared: PreparedSubagentLaunch,
@@ -238,6 +254,7 @@ export function getPersistedPromptLaunchArgs(
 
 export async function getPersistedSessionParityArgs(
 	metadata: PersistedSubagentLaunchMetadata | undefined,
+	modeOverride?: ResumeMode,
 ): Promise<string[]> {
 	const args: string[] = [];
 	if (!metadata) return args;
@@ -255,6 +272,7 @@ export async function getPersistedSessionParityArgs(
 			metadata.extensions,
 		)).launchArgs,
 	);
+	args.push(...getPersistedApprovalLaunchArgs(metadata, modeOverride ?? metadata.mode));
 	args.push(...getFlagsLaunchArgs(metadata.flags));
 	return args;
 }
@@ -329,6 +347,7 @@ export function buildPersistedSubagentLaunchMetadata(
 			: {}),
 		noContextFiles: resolveSubagentNoContextFiles(prepared.agentDefs),
 		noSession: resolveSubagentNoSession(prepared.agentDefs),
+		trustProject: prepared.agentDefs?.trustProject === true,
 		agentConfigDir: prepared.runtimePaths.effectiveAgentConfigDir,
 		cwd: prepared.runtimePaths.targetCwdForSession,
 		...(prepared.agentDefs?.systemPromptMode

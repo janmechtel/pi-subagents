@@ -6,6 +6,7 @@ import {
 	getSubagentChildProcessEnv,
 } from "./child-command.ts";
 import {
+	getApprovalLaunchArgs,
 	getFlagsLaunchArgs,
 	getPreparedExtensionLaunchArgs,
 	getPreparedModel,
@@ -77,6 +78,7 @@ export async function launchBackgroundSubagent(
 	if (launch.boundarySystemPrompt) {
 		args.push("--append-system-prompt", CHILD_CONTEXT_BOUNDARY_SYSTEM_PROMPT);
 	}
+	args.push(...getApprovalLaunchArgs(prepared.agentDefs, "background"));
 	args.push(...getSubagentToolLaunchArgs(prepared.effectiveTools, prepared.denySet));
 	args.push(...getPreparedSkillLaunchArgs(prepared));
 	args.push(...getFlagsLaunchArgs(prepared.agentDefs?.flags));

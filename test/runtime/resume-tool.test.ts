@@ -164,6 +164,137 @@ describe("subagent_resume coordinator-only-turn", () => {
 	});
 });
 
+describe("subagent_resume approval args", () => {
+	function createResumeRuntime() {
+		return {
+			isMuxAvailable: () => true,
+			getShellReadyDelayMs: () => 0,
+			waitForInteractivePrompt: async () => {},
+			watchBackgroundSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+			watchSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+			getWatcherSignal: (_running: any, controller: AbortController) => controller.signal,
+			startWidgetRefresh: () => {},
+			getContextWindow: () => undefined,
+			runningSubagents: new Map<string, any>(),
+		};
+	}
+
+	it("passes no-approve when resuming a session without launch metadata", async () => {
+		const dir = createTestDir();
+		const bin = writeExecutable(dir, "capture-pi", `#!/usr/bin/env bash\nexit 0\n`);
+		const originalCommand = process.env.PI_SUBAGENT_PI_COMMAND;
+		process.env.PI_SUBAGENT_PI_COMMAND = bin;
+		try {
+			const sessionFile = join(dir, "child.jsonl");
+			writeFileSync(
+				sessionFile,
+				JSON.stringify({ type: "session", version: 3, id: "s", timestamp: new Date().toISOString(), cwd: dir }) + "\n",
+			);
+
+			const running = await resumeSubagentSession(
+				{ sessionFile, mode: "background" },
+				createResumeRuntime(),
+			);
+
+			assert.equal(
+				running.childProcess?.spawnargs.includes("--no-approve"),
+				true,
+			);
+		} finally {
+			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;
+			else process.env.PI_SUBAGENT_PI_COMMAND = originalCommand;
+		}
+	});
+
+	it("does not duplicate generated approval args for metadata-backed background resumes", async () => {
+		const dir = createTestDir();
+		const bin = writeExecutable(dir, "capture-pi", `#!/usr/bin/env bash\nexit 0\n`);
+		const originalCommand = process.env.PI_SUBAGENT_PI_COMMAND;
+		process.env.PI_SUBAGENT_PI_COMMAND = bin;
+		try {
+			const sessionFile = join(dir, "child.jsonl");
+			writeFileSync(
+				sessionFile,
+				JSON.stringify({ type: "session", version: 3, id: "s", timestamp: new Date().toISOString(), cwd: dir }) + "\n",
+			);
+			await writeSubagentLaunchMetadataEntryForTest(sessionFile, {
+				version: 1,
+				timestamp: new Date().toISOString(),
+				name: "resume-child",
+				mode: "background",
+				sessionMode: "lineage-only",
+				autoExit: true,
+				parentClosePolicy: "terminate",
+				async: true,
+				trustProject: true,
+				denyTools: [],
+				noContextFiles: false,
+				noSession: false,
+				agentConfigDir: dir,
+				cwd: dir,
+				boundarySystemPrompt: false,
+			});
+
+			const running = await resumeSubagentSession(
+				{ sessionFile },
+				createResumeRuntime(),
+			);
+			const approvalArgs = running.childProcess?.spawnargs.filter(
+				(arg) => arg === "--approve" || arg === "--no-approve",
+			) ?? [];
+
+			assert.deepEqual(approvalArgs, ["--no-approve"]);
+		} finally {
+			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;
+			else process.env.PI_SUBAGENT_PI_COMMAND = originalCommand;
+		}
+	});
+
+	it("uses the explicit background resume mode for persisted approval policy", async () => {
+		const dir = createTestDir();
+		const bin = writeExecutable(dir, "capture-pi", `#!/usr/bin/env bash\nexit 0\n`);
+		const originalCommand = process.env.PI_SUBAGENT_PI_COMMAND;
+		process.env.PI_SUBAGENT_PI_COMMAND = bin;
+		try {
+			const sessionFile = join(dir, "child.jsonl");
+			writeFileSync(
+				sessionFile,
+				JSON.stringify({ type: "session", version: 3, id: "s", timestamp: new Date().toISOString(), cwd: dir }) + "\n",
+			);
+			await writeSubagentLaunchMetadataEntryForTest(sessionFile, {
+				version: 1,
+				timestamp: new Date().toISOString(),
+				name: "trusted-interactive",
+				mode: "interactive",
+				sessionMode: "lineage-only",
+				autoExit: true,
+				parentClosePolicy: "terminate",
+				async: true,
+				trustProject: true,
+				denyTools: [],
+				noContextFiles: false,
+				noSession: false,
+				agentConfigDir: dir,
+				cwd: dir,
+				boundarySystemPrompt: false,
+			});
+
+			const running = await resumeSubagentSession(
+				{ sessionFile, mode: "background" },
+				createResumeRuntime(),
+			);
+			const approvalArgs = running.childProcess?.spawnargs.filter(
+				(arg) => arg === "--approve" || arg === "--no-approve",
+			) ?? [];
+
+			assert.deepEqual(approvalArgs, ["--no-approve"]);
+		} finally {
+			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;
+			else process.env.PI_SUBAGENT_PI_COMMAND = originalCommand;
+		}
+	});
+});
+
 describe("subagent_resume interactive prompt delivery", () => {
 	it("writes follow-up text to a resume artifact without trimming user content", () => {
 		const dir = createTestDir();
