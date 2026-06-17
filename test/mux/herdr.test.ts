@@ -1,5 +1,7 @@
 import {
 	assert,
+	createSurface,
+	createSurfaceSplit,
 	createTestDir,
 	describe,
 	it,
@@ -91,6 +93,22 @@ fi
 
 if [ "$cmd" = "workspace get w1" ]; then
   printf '%s\n' '{"id":"cli:workspace:get","result":{"type":"workspace_info","workspace":{"workspace_id":"w1","active_tab_id":"w1:t1","label":"Main","focused":true,"tab_count":1,"pane_count":1}}}'
+  exit 0
+fi
+
+if [ "$1" = "tab" ] && [ "$2" = "create" ]; then
+  printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "split" ]; then
+  direction=""
+  previous=""
+  for arg in "$@"; do
+    if [ "$previous" = "--direction" ]; then direction="$arg"; fi
+    previous="$arg"
+  done
+  printf '%s\n' '{"id":"cli:pane:split","result":{"type":"pane_split","pane":{"pane_id":"w1:p-split-'"$direction"'","tab_id":"w1:t1","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
   exit 0
 fi
 
@@ -207,6 +225,60 @@ describe("Herdr mux backend", () => {
 
 			assert.match(muxSetupHint(), /Herdr/);
 		});
+	});
+
+	describe("surface creation", () => {
+		it("creates normal surfaces as non-shrinking Herdr tabs", () => {
+			const { logFile } = useFakeHerdr();
+			process.env.PI_SUBAGENT_MUX = "herdr";
+
+			assert.equal(createSurface("Herdr Child"), "w1:p2");
+
+			const log = readFileSync(logFile, "utf8");
+			assert.match(
+				log,
+				/tab create --workspace w1 --cwd .* --label Herdr Child --no-focus/,
+			);
+			assert.doesNotMatch(log, /pane split/);
+		});
+
+		for (const direction of ["right", "down"] as const) {
+			it(`creates explicit ${direction} Herdr splits with cwd and no-focus`, () => {
+				const { logFile } = useFakeHerdr();
+				process.env.PI_SUBAGENT_MUX = "herdr";
+
+				assert.equal(
+					createSurfaceSplit("Herdr Split", direction, "w1:p1"),
+					`w1:p-split-${direction}`,
+				);
+
+				const log = readFileSync(logFile, "utf8");
+				assert.match(
+					log,
+					new RegExp(
+						`pane split w1:p1 --direction ${direction} --cwd .* --no-focus`,
+					),
+				);
+				assert.doesNotMatch(log, /tab create/);
+			});
+		}
+
+		for (const direction of ["left", "up"] as const) {
+			it(`rejects unsupported ${direction} Herdr splits honestly`, () => {
+				const { logFile } = useFakeHerdr();
+				process.env.PI_SUBAGENT_MUX = "herdr";
+
+				assert.throws(
+					() => createSurfaceSplit("Herdr Split", direction, "w1:p1"),
+					new RegExp(
+						`Herdr split direction "${direction}" is unsupported; .*right and down`,
+					),
+				);
+
+				const log = readFileSync(logFile, "utf8");
+				assert.doesNotMatch(log, /pane split/);
+			});
+		}
 	});
 
 	describe("structured CLI adapter", () => {

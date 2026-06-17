@@ -37,6 +37,11 @@ export type HerdrWorkspace = {
 	paneCount?: number;
 };
 
+export type HerdrCreatedTabSurface = {
+	tab: HerdrTab;
+	pane: HerdrPane;
+};
+
 type HerdrProcessResult = ReturnType<typeof spawnSync>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -216,6 +221,23 @@ function parseWorkspace(value: unknown, operation: string): HerdrWorkspace {
 	};
 }
 
+function parseCreatedTabSurface(
+	result: Record<string, unknown>,
+	operation: string,
+): HerdrCreatedTabSurface {
+	return {
+		tab: parseTab(result.tab, operation),
+		pane: parsePane(result.pane, operation),
+	};
+}
+
+function parseCreatedPane(
+	result: Record<string, unknown>,
+	operation: string,
+): HerdrPane {
+	return parsePane(result.pane, operation);
+}
+
 export function getHerdrServerStatus(): HerdrServerStatus {
 	const value = runHerdrJson("status server", ["status", "server", "--json"]);
 	if (!isRecord(value)) {
@@ -244,6 +266,35 @@ export function getHerdrTab(tabId: string): HerdrTab {
 export function getHerdrWorkspace(workspaceId: string): HerdrWorkspace {
 	const result = runHerdrApi("workspace get", ["workspace", "get", workspaceId]);
 	return parseWorkspace(result.workspace, "workspace get");
+}
+
+export function createHerdrTabSurface(options: {
+	label: string;
+	cwd: string;
+	workspaceId?: string;
+	focus?: boolean;
+}): HerdrCreatedTabSurface {
+	const args = ["tab", "create"];
+	if (options.workspaceId) args.push("--workspace", options.workspaceId);
+	args.push("--cwd", options.cwd, "--label", options.label);
+	args.push(options.focus ? "--focus" : "--no-focus");
+	const result = runHerdrApi("tab create", args);
+	return parseCreatedTabSurface(result, "tab create");
+}
+
+export function splitHerdrPane(options: {
+	paneId?: string;
+	direction: "right" | "down";
+	cwd: string;
+	focus?: boolean;
+}): HerdrPane {
+	const args = ["pane", "split"];
+	if (options.paneId) args.push(options.paneId);
+	else args.push("--current");
+	args.push("--direction", options.direction, "--cwd", options.cwd);
+	args.push(options.focus ? "--focus" : "--no-focus");
+	const result = runHerdrApi("pane split", args);
+	return parseCreatedPane(result, "pane split");
 }
 
 export function isHerdrRuntimeAvailable(

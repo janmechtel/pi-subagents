@@ -6,6 +6,7 @@ import {
 	zellijActionSync,
 } from "./core.ts";
 import { createCmuxSplit, createCmuxSurface } from "./cmux-surfaces.ts";
+import { createHerdrSplit, createHerdrSurface } from "./herdr-surfaces.ts";
 import { createZellijSurface } from "./zellij-placement.ts";
 
 const DEFAULT_INTERACTIVE_MIN_COLUMNS = 50;
@@ -38,7 +39,7 @@ export function createSurface(name: string): string {
 	}
 
 	if (backend === "herdr") {
-		throw new Error("Herdr surface creation is not implemented yet");
+		return createHerdrSurface(name);
 	}
 
 	return createSurfaceSplit(name, "right");
@@ -299,7 +300,7 @@ export function createSurfaceSplit(
 		return createWezTermSplit(name, direction, fromSurface);
 	if (backend === "zellij")
 		return createZellijSplit(name, direction, fromSurface);
-	throw new Error("Herdr split surface creation is not implemented yet");
+	return createHerdrSplit(name, direction, fromSurface);
 }
 
 export function renameCurrentTab(title: string): void {
