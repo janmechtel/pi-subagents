@@ -245,6 +245,51 @@ function getParentScreen(parentPaneId) {
   }
 }
 
+async function waitForParentPiStartup(parentPaneId) {
+  const deadline = Date.now() + 30_000;
+  let lastScreen = "";
+  while (Date.now() < deadline) {
+    lastScreen = getParentScreen(parentPaneId);
+    if (
+      lastScreen.includes("escape interrupt") ||
+      lastScreen.includes("Model scope:") ||
+      lastScreen.includes("Press ctrl+o to show full startup help")
+    ) {
+      return;
+    }
+    await sleep(POLL_INTERVAL_MS);
+  }
+  throw new Error(`Timed out waiting for parent Pi startup screen:\n${trimForError(lastScreen)}`);
+}
+
+async function waitForParentEditorText(parentPaneId, text) {
+  const deadline = Date.now() + 30_000;
+  let lastScreen = "";
+  while (Date.now() < deadline) {
+    lastScreen = getParentScreen(parentPaneId);
+    if (lastScreen.includes(text)) return;
+    await sleep(POLL_INTERVAL_MS);
+  }
+  throw new Error(`Timed out waiting for parent editor text ${text}:\n${trimForError(lastScreen)}`);
+}
+
+async function submitParentPromptUntilAssistant(ctx, scenario, parentPaneId) {
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    runHerdrRaw(["pane", "send-keys", parentPaneId, "Enter"]);
+    const settle = Date.now() + 8_000;
+    while (Date.now() < settle) {
+      await sleep(POLL_INTERVAL_MS);
+      const parent = findParentSession(ctx.sessionDir, scenario.doneText);
+      const hasAssistantTurn = parent?.events.some(
+        (event) => event.type === "message" && event.message?.role === "assistant",
+      );
+      if (hasAssistantTurn) return;
+    }
+  }
+  throw new Error(`Parent never produced an assistant turn after submitting the prompt for ${scenario.name}`);
+}
+
 async function waitForScenarioOutcome(ctx, scenario, parentPaneId, parentTabId) {
   const deadline = Date.now() + SCENARIO_TIMEOUT_MS;
   let observedChildTabId = "";
@@ -300,6 +345,7 @@ function writeChildAgent(ctx, scenario, liveModel) {
   const [model, thinking] = liveModel.split(":", 2);
   const thinkingLine = thinking ? `thinking: ${thinking}\n` : "";
   const envValue = `${scenario.name}-env`;
+  const childCwd = join(ctx.workDir, scenario.childWorkspaceName);
   const probeCommand = `printf 'scenario=%s\\ncwd=%s\\nenv=%s\\n' ${shellQuote(scenario.name)} "$PWD" "$LIVE_HERDR_CHILD_ENV" > ${shellQuote(scenario.probePath)}; sleep 2`;
 
   writeFileSync(
@@ -315,7 +361,7 @@ spawning: false
 tools: bash
 model: ${model}
 ${thinkingLine}trust-project: true
-cwd: ${scenario.childWorkspaceName}
+cwd: ${childCwd}
 env: |
   LIVE_HERDR_CHILD_ENV=${envValue}
 ---
@@ -333,11 +379,8 @@ Then reply with exactly \`${scenario.childDoneText}\` and nothing else.
 
 function buildParentPrompt(scenario) {
   return [
-    "The subagent tool is available in this interactive Herdr parent session.",
-    "Use exactly this sequence.",
     `Call subagent with name "${scenario.childName}", agent "${scenario.agentName}", title "${scenario.title}", task "Follow your exact built-in instructions. Do not change the bash command.".`,
-    `After the tool returns, reply with exactly "${scenario.doneText}" and nothing else.`,
-    "Do not call any other tools.",
+    `After the subagent tool returns, reply exactly "${scenario.doneText}".`,
   ].join(" ");
 }
 
@@ -355,10 +398,11 @@ function buildParentCommand(ctx, scenario, prompt, liveModel) {
     "PI_PACKAGE_DIR=",
     "PI_SUBAGENT_EXTENSIONS=",
     "PI_SUBAGENT_DISABLE_AMBIENT_AWARENESS=1",
-    "PI_SUBAGENT_SHELL_READY_DELAY_MS=100",
+    "PI_SUBAGENT_SHELL_READY_DELAY_MS=1000",
     `PI_SUBAGENT_PI_COMMAND=${shellQuote(piBin)}`,
     `PI_CODING_AGENT_DIR=${shellQuote(ctx.configDir)}`,
     `PI_ARTIFACT_PROJECT_ROOT=${shellQuote(ctx.artifactsDir)}`,
+    `PI_SUBAGENT_TRACE_LOG=${shellQuote(join(ctx.tmpRoot, "subagent-trace.log"))}`,
     ...(scenario.forceMux ? ["PI_SUBAGENT_MUX=herdr"] : []),
   ].join(" ");
   const args = [
@@ -439,10 +483,10 @@ async function runScenario(ctx, scenario, liveModel) {
       `${ctx.marker} parent ${scenario.name}`,
       "--no-focus",
     ]);
-    const parentPane = created.pane;
+    const parentPane = created.root_pane ?? created.pane;
     const parentTab = created.tab;
     if (!parentPane || typeof parentPane.pane_id !== "string") {
-      throw new Error(`herdr tab create did not return a parent pane: ${JSON.stringify(created)}`);
+      throw new Error(`herdr tab create did not return a parent root pane: ${JSON.stringify(created)}`);
     }
     if (!parentTab || typeof parentTab.tab_id !== "string") {
       throw new Error(`herdr tab create did not return a parent tab: ${JSON.stringify(created)}`);
@@ -453,7 +497,10 @@ async function runScenario(ctx, scenario, liveModel) {
     await sleep(500);
     const prompt = buildParentPrompt(scenario);
     const command = buildParentCommand(ctx, scenario, prompt, liveModel);
-    herdrResult("pane send-text", ["pane", "send-text", parentPaneId, `${command}\n`]);
+    runHerdrRaw(["pane", "run", parentPaneId, command]);
+    await waitForParentPiStartup(parentPaneId);
+    await waitForParentEditorText(parentPaneId, scenario.doneText);
+    await submitParentPromptUntilAssistant(ctx, scenario, parentPaneId);
 
     const outcome = await waitForScenarioOutcome(ctx, scenario, parentPaneId, parentTabId);
     observedChildTabId = outcome.observedChildTabId;

@@ -58,12 +58,19 @@ if [ "$*" = "pane current --current" ]; then
 fi
 
 if [ "$1" = "tab" ] && [ "$2" = "create" ]; then
-  printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/child","focused":false}}}'
+  printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"root_pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/child","focused":false}}}'
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
   exit 0
 fi
 
 if [ "$1" = "pane" ] && [ "$2" = "send-text" ]; then
-  printf '%s\n' '{"id":"cli:pane:send-text","result":{"type":"pane_sent_text"}}'
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "send-keys" ]; then
   exit 0
 fi
 
@@ -106,10 +113,16 @@ async function readEventually(
 	throw new Error(`Timed out waiting for ${path}; last content: ${lastText}`);
 }
 
-function extractTaskArtifactPath(log: string): string {
-	const match = log.match(/'@([^']+)'/);
+function extractTaskArtifactPath(commandText: string): string {
+	const match = commandText.match(/'@([^']+)'/);
 	if (!match?.[1]) throw new Error("Expected Herdr launch command to include a task artifact argument");
 	return match[1];
+}
+
+function readHerdrRunScript(log: string): string {
+	const match = log.match(/pane run w1:p2 '([^']+)'/);
+	if (!match?.[1]) throw new Error("Expected Herdr launch command to run a staged shell script");
+	return readFileSync(match[1], "utf8");
 }
 
 describe("Herdr interactive launch parity", () => {
@@ -182,14 +195,16 @@ describe("Herdr interactive launch parity", () => {
 		assert.match(log, /status server --json/);
 		assert.match(log, /pane current --current/);
 		assert.match(log, /tab create --workspace w1 --cwd .* --label path-session-child --no-focus/);
-		assert.match(log, /pane send-text w1:p2 /);
-		assert.match(log, new RegExp(`cd '${childCwd.replace(/'/g, "'\\''")}' &&`));
-		assert.match(log, new RegExp(`'--session' '${running.sessionFile.replace(/'/g, "'\\''")}'`));
-		assert.match(log, /'--no-session'/);
-		assert.match(log, /'--approve'/);
-		assert.match(log, /CUSTOM_ENV='from-agent'/);
-		assert.match(log, /PI_SUBAGENT_SURFACE='w1:p2'/);
-		assert.match(log, /'--alpha' 'two words'/);
+		assert.match(log, /pane run w1:p2 /);
+		assert.doesNotMatch(log, /pane send-keys w1:p2 Enter/);
+		const launchScript = readHerdrRunScript(log);
+		assert.match(launchScript, new RegExp(`cd '${childCwd.replace(/'/g, "'\\''")}' &&`));
+		assert.match(launchScript, new RegExp(`'--session' '${running.sessionFile.replace(/'/g, "'\\''")}'`));
+		assert.match(launchScript, /'--no-session'/);
+		assert.match(launchScript, /'--approve'/);
+		assert.match(launchScript, /CUSTOM_ENV='from-agent'/);
+		assert.match(launchScript, /PI_SUBAGENT_SURFACE='w1:p2'/);
+		assert.match(launchScript, /'--alpha' 'two words'/);
 	});
 
 	it("honors an explicit Herdr mux preference at the launch seam", async () => {
@@ -255,8 +270,10 @@ describe("Herdr interactive launch parity", () => {
 		assert.match(log, /status server --json/);
 		assert.match(log, /pane current --current/);
 		assert.match(log, /tab create --workspace w1 --cwd .* --label forced-herdr-child --no-focus/);
-		assert.match(log, /pane send-text w1:p2 /);
-		assert.match(log, /PI_SUBAGENT_SURFACE='w1:p2'/);
+		assert.match(log, /pane run w1:p2 /);
+		assert.doesNotMatch(log, /pane send-keys w1:p2 Enter/);
+		const launchScript = readHerdrRunScript(log);
+		assert.match(launchScript, /PI_SUBAGENT_SURFACE='w1:p2'/);
 	});
 
 	it("launches interactive Herdr children with resolved capability, model, and lifecycle facts", async () => {
@@ -366,20 +383,23 @@ describe("Herdr interactive launch parity", () => {
 
 		const log = readFileSync(logFile, "utf8");
 		assert.match(log, /tab create --workspace w1 --cwd .* --label capability-child --no-focus/);
-		assert.match(log, /PI_SUBAGENT_AUTO_EXIT='1'/);
-		assert.match(log, /PI_DENY_TOOLS='subagent,subagent_resume,grep,set_tab_title'/);
-		assert.match(log, /PI_SUBAGENT_EXTENSIONS=''/);
-		assert.match(log, /--model 'zai-messages\/glm-5-turbo:off'/);
-		assert.match(log, /--no-context-files/);
-		assert.match(log, /'--no-extensions' '-e' '.*\/tools\/subagent-done\.ts'/);
-		assert.equal(log.match(/'--tools' '([^']+)'/)?.[1], "read,grep,caller_ping,subagent_done");
+		assert.match(log, /pane run w1:p2 /);
+		assert.doesNotMatch(log, /pane send-keys w1:p2 Enter/);
+		const launchScript = readHerdrRunScript(log);
+		assert.match(launchScript, /PI_SUBAGENT_AUTO_EXIT='1'/);
+		assert.match(launchScript, /PI_DENY_TOOLS='subagent,subagent_resume,grep,set_tab_title'/);
+		assert.match(launchScript, /PI_SUBAGENT_EXTENSIONS=''/);
+		assert.match(launchScript, /--model 'zai-messages\/glm-5-turbo:off'/);
+		assert.match(launchScript, /--no-context-files/);
+		assert.match(launchScript, /'--no-extensions' '-e' '.*\/tools\/subagent-done\.ts'/);
+		assert.equal(launchScript.match(/'--tools' '([^']+)'/)?.[1], "read,grep,caller_ping,subagent_done");
 		assert.equal(
-			log.match(/'--exclude-tools' '([^']+)'/)?.[1],
+			launchScript.match(/'--exclude-tools' '([^']+)'/)?.[1],
 			"subagent,subagent_resume,grep,set_tab_title",
 		);
-		assert.match(log, new RegExp(`'--skill' '${skillFile.replace(/'/g, "'\\''")}'`));
+		assert.match(launchScript, new RegExp(`'--skill' '${skillFile.replace(/'/g, "'\\''")}'`));
 
-		const taskArtifact = readFileSync(extractTaskArtifactPath(log), "utf8");
+		const taskArtifact = readFileSync(extractTaskArtifactPath(launchScript), "utf8");
 		assert.match(taskArtifact, /<skill name="review">/);
 		assert.match(taskArtifact, /Review skill body token\./);
 		assert.match(taskArtifact, /Complete your task autonomously\./);

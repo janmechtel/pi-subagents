@@ -15,8 +15,8 @@ import {
 	closeHerdrPane,
 	readHerdrPaneScreen,
 	readHerdrPaneScreenAsync,
+	runHerdrPaneCommand,
 	sendHerdrPaneEnter,
-	sendHerdrPaneText,
 } from "./herdr.ts";
 
 export function sendCommand(surface: string, command: string): void {
@@ -60,7 +60,7 @@ export function sendCommand(surface: string, command: string): void {
 		return;
 	}
 	if (backend === "herdr") {
-		if (command.length > 0) sendHerdrPaneText(surface, `${command}\n`);
+		if (command.length > 0) runHerdrPaneCommand(surface, command);
 		else sendHerdrPaneEnter(surface);
 		return;
 	}
@@ -72,7 +72,7 @@ function stageShellCommand(command: string): string {
 	const ext = isFishShell() ? ".fish" : ".sh";
 	const scriptPath = join(
 		tmpdir(),
-		`pi-subagent-cmux-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`,
+		`pi-subagent-shell-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`,
 	);
 	writeFileSync(scriptPath, `#!${shell}\n${command}\n`, "utf8");
 	chmodSync(scriptPath, 0o700);
@@ -85,7 +85,7 @@ function buildStagedShellCommand(scriptPath: string): string {
 
 export function sendShellCommand(surface: string, command: string): void {
 	const backend = requireMuxBackend();
-	if (backend !== "cmux") {
+	if (backend !== "cmux" && backend !== "herdr") {
 		sendCommand(surface, command);
 		return;
 	}

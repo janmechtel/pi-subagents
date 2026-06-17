@@ -104,7 +104,14 @@ if [ "$cmd" = "workspace get w1" ]; then
 fi
 
 if [ "$1" = "tab" ] && [ "$2" = "create" ]; then
-  printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
+  case "$mode" in
+    tab-created-without-pane)
+      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1}}}'
+      ;;
+    *)
+      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"root_pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
+      ;;
+  esac
   exit 0
 fi
 
@@ -119,13 +126,30 @@ if [ "$1" = "pane" ] && [ "$2" = "split" ]; then
   exit 0
 fi
 
+if [ "$1" = "pane" ] && [ "$2" = "run" ]; then
+  case "$mode" in
+    run-api-error)
+      printf '%s\n' '{"error":{"code":"permission_denied","message":"fake run refused"},"id":"cli:pane:run"}'
+      exit 1
+      ;;
+    run-malformed-output)
+      printf '%s\n' 'not-json'
+      exit 0
+      ;;
+    run-empty-failure)
+      exit 1
+      ;;
+    *)
+      exit 0
+      ;;
+  esac
+fi
+
 if [ "$1" = "pane" ] && [ "$2" = "send-text" ]; then
-  printf '%s\n' '{"id":"cli:pane:send-text","result":{"type":"pane_sent_text"}}'
   exit 0
 fi
 
 if [ "$1" = "pane" ] && [ "$2" = "send-keys" ]; then
-  printf '%s\n' '{"id":"cli:pane:send-keys","result":{"type":"pane_sent_keys"}}'
   exit 0
 fi
 
@@ -146,6 +170,11 @@ if [ "$1" = "pane" ] && [ "$2" = "close" ]; then
     exit 1
   fi
   printf '%s\n' '{"id":"cli:pane:close","result":{"type":"pane_closed"}}'
+  exit 0
+fi
+
+if [ "$1" = "tab" ] && [ "$2" = "close" ]; then
+  printf '%s\n' '{"id":"cli:tab:close","result":{"type":"ok"}}'
   exit 0
 fi
 
@@ -296,6 +325,20 @@ describe("Herdr mux backend", () => {
 			assert.doesNotMatch(log, /pane split/);
 		});
 
+		it("closes the created Herdr tab when tab creation returns no root pane", () => {
+			const { logFile } = useFakeHerdr("tab-created-without-pane");
+			process.env.PI_SUBAGENT_MUX = "herdr";
+
+			assert.throws(
+				() => createSurface("Herdr Child"),
+				/Herdr tab create returned malformed pane record/,
+			);
+
+			const log = readFileSync(logFile, "utf8");
+			assert.match(log, /tab create --workspace w1 --cwd .* --label Herdr Child --no-focus/);
+			assert.match(log, /tab close w1:t2/);
+		});
+
 		for (const direction of ["right", "down"] as const) {
 			it(`creates explicit ${direction} Herdr splits with cwd and no-focus`, () => {
 				const { logFile } = useFakeHerdr();
@@ -353,15 +396,40 @@ describe("Herdr mux backend", () => {
 			closeSurface("w1:p2");
 
 			const log = readFileSync(logFile, "utf8");
-			assert.match(log, /pane send-text w1:p2 echo herdr/);
-			assert.match(log, /pane send-keys w1:p2 Enter/);
-			assert.match(log, /pane send-text w1:p2 printf shell/);
+			assert.match(log, /pane run w1:p2 echo herdr/);
+			const stagedScriptPath = log.match(/pane run w1:p2 '([^']+)'/)?.[1];
+			assert.ok(stagedScriptPath, "expected sendShellCommand to stage Herdr shell command");
+			assert.match(readFileSync(stagedScriptPath, "utf8"), /printf shell/);
+			assert.equal((log.match(/pane send-keys w1:p2 Enter/g) ?? []).length, 1);
 			assert.match(
 				log,
 				/pane read w1:p2 --source recent --lines 10 --format text/,
 			);
 			assert.match(log, /pane close w1:p2/);
 		});
+
+		for (const [mode, expected] of [
+			[
+				"run-api-error",
+				/Herdr pane run failed: permission_denied: fake run refused/,
+			],
+			["run-malformed-output", /Herdr pane run returned malformed JSON/],
+			[
+				"run-empty-failure",
+				/Herdr pane run failed with exit code 1: \(empty\)/,
+			],
+		] as const) {
+			it(`reports ${mode} Herdr command failures`, () => {
+				const { logFile } = useFakeHerdr(mode);
+				process.env.PI_SUBAGENT_MUX = "herdr";
+
+				assert.throws(() => sendCommand("w1:p2", "echo herdr"), expected);
+
+				const log = readFileSync(logFile, "utf8");
+				assert.match(log, /pane run w1:p2 echo herdr/);
+				assert.doesNotMatch(log, /pane send-keys w1:p2 Enter/);
+			});
+		}
 
 		it("renames Herdr tab and workspace labels from environment or current pane metadata", () => {
 			const { logFile } = useFakeHerdr();

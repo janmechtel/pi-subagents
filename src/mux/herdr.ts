@@ -229,6 +229,41 @@ function runHerdrText(operation: string, args: string[]): string {
 	return typeof result.stdout === "string" ? result.stdout : "";
 }
 
+function runHerdrVoid(operation: string, args: string[]): void {
+	// Herdr void commands such as pane run/send report success with exit code 0 and empty stdout.
+	// Structured JSON output is optional here and exists only on failures or future CLI variants.
+	const result = spawnSync("herdr", args, { encoding: "utf8" });
+	if (result.error) {
+		throw new Error(
+			`Herdr ${operation} failed to start: ${result.error.message}`,
+		);
+	}
+
+	const output = getOutput(result);
+	if (output) {
+		let parsed: unknown;
+		try {
+			parsed = parseHerdrJson(operation, output);
+		} catch (error) {
+			if (result.status && result.status !== 0) {
+				throw new Error(
+					`Herdr ${operation} failed with exit code ${result.status}: ${trimForError(output)}`,
+				);
+			}
+			throw error;
+		}
+		if (isRecord(parsed) && "error" in parsed) {
+			throw formatHerdrApiError(operation, parsed.error, trimForError(output));
+		}
+	}
+
+	if (typeof result.status === "number" && result.status !== 0) {
+		throw new Error(
+			`Herdr ${operation} failed with exit code ${result.status}: ${trimForError(output) || "(empty)"}`,
+		);
+	}
+}
+
 async function runHerdrTextAsync(
 	operation: string,
 	args: string[],
@@ -309,14 +344,26 @@ function parseWorkspace(value: unknown, operation: string): HerdrWorkspace {
 	};
 }
 
+function closeHerdrTabQuiet(tabId: string): void {
+	try {
+		runHerdrApi("tab close", ["tab", "close", tabId]);
+	} catch {}
+}
+
 function parseCreatedTabSurface(
 	result: Record<string, unknown>,
 	operation: string,
 ): HerdrCreatedTabSurface {
-	return {
-		tab: parseTab(result.tab, operation),
-		pane: parsePane(result.pane, operation),
-	};
+	const tab = parseTab(result.tab, operation);
+	try {
+		return {
+			tab,
+			pane: parsePane(result.root_pane ?? result.pane, operation),
+		};
+	} catch (error) {
+		closeHerdrTabQuiet(tab.tabId);
+		throw error;
+	}
 }
 
 function parseCreatedPane(
@@ -385,12 +432,12 @@ export function splitHerdrPane(options: {
 	return parseCreatedPane(result, "pane split");
 }
 
-export function sendHerdrPaneText(paneId: string, text: string): void {
-	runHerdrApi("pane send-text", ["pane", "send-text", paneId, text]);
+export function runHerdrPaneCommand(paneId: string, command: string): void {
+	runHerdrVoid("pane run", ["pane", "run", paneId, command]);
 }
 
 export function sendHerdrPaneEnter(paneId: string): void {
-	runHerdrApi("pane send-keys", ["pane", "send-keys", paneId, "Enter"]);
+	runHerdrVoid("pane send-keys", ["pane", "send-keys", paneId, "Enter"]);
 }
 
 export function readHerdrPaneScreen(paneId: string, lines: number): string {

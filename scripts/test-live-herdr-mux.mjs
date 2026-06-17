@@ -216,6 +216,7 @@ async function runInner() {
   const {
     closeSurface,
     createSurface,
+    createSurfaceSplit,
     readScreen,
     readScreenAsync,
     renameCurrentTab,
@@ -227,6 +228,7 @@ async function runInner() {
 
   let childPaneId = "";
   let childTabId = "";
+  let splitPaneId = "";
   let workspaceId = "";
   let originalWorkspaceLabel = "";
 
@@ -278,8 +280,18 @@ async function runInner() {
       throw new Error(`Expected child workspace ${workspaceId}, got ${childPane.workspace_id ?? "(missing)"}`);
     }
 
-    const commandNeedle = `${marker}:command`;
-    const shellNeedle = `${marker}:shell`;
+    splitPaneId = createSurfaceSplit(`${marker} split`, "right", childPaneId);
+    const splitPane = paneFromResult("pane get", ["pane", "get", splitPaneId]);
+    if (splitPane.tab_id !== childTabId) {
+      throw new Error(`Expected explicit Herdr split to stay in child tab ${childTabId}, got ${splitPane.tab_id ?? "(missing)"}`);
+    }
+    if (splitPane.workspace_id !== workspaceId) {
+      throw new Error(`Expected split workspace ${workspaceId}, got ${splitPane.workspace_id ?? "(missing)"}`);
+    }
+
+    const shortToken = marker.split("-").at(-1) ?? String(Date.now());
+    const commandNeedle = `cmd-${shortToken}`;
+    const shellNeedle = `sh-${shortToken}`;
     sendCommand(childPaneId, `printf '${commandNeedle}\\n'`);
     const syncScreen = await waitForScreen((pane, lines) => Promise.resolve(readScreen(pane, lines)), childPaneId, commandNeedle);
     sendCommand(childPaneId, "");
@@ -290,6 +302,8 @@ async function runInner() {
       throw new Error("Herdr screen reads did not include the sent command markers");
     }
 
+    closeSurface(splitPaneId);
+    splitPaneId = "";
     closeSurface(childPaneId);
     closeSurface(childPaneId);
 
@@ -301,6 +315,7 @@ async function runInner() {
       workspaceId,
       childPaneId,
       childTabId,
+      splitPaneVerified: true,
       nonShrinking: childTabId !== parentPane.tabId,
       commandReadVerified: syncScreen.includes(commandNeedle),
       asyncReadVerified: asyncScreen.includes(shellNeedle),
@@ -310,6 +325,7 @@ async function runInner() {
     });
   } catch (error) {
     if (originalWorkspaceLabel) restoreWorkspaceQuiet(workspaceId, originalWorkspaceLabel);
+    if (splitPaneId) closePaneQuiet(splitPaneId);
     if (childPaneId) closePaneQuiet(childPaneId);
     writeInnerResult({
       status: "error",
@@ -348,10 +364,10 @@ async function runOuter() {
       `${marker} parent`,
       "--no-focus",
     ]);
-    const parentPane = created.pane;
+    const parentPane = created.root_pane ?? created.pane;
     const parentTab = created.tab;
     if (!parentPane || typeof parentPane.pane_id !== "string") {
-      throw new Error(`herdr tab create did not return a parent pane: ${JSON.stringify(created)}`);
+      throw new Error(`herdr tab create did not return a parent root pane: ${JSON.stringify(created)}`);
     }
     if (!parentTab || typeof parentTab.tab_id !== "string") {
       throw new Error(`herdr tab create did not return a parent tab: ${JSON.stringify(created)}`);
@@ -372,7 +388,7 @@ async function runOuter() {
       `PI_SUBAGENT_HERDR_SMOKE_RESULT=${shellQuote(resultPath)}`,
     ].join(" ");
     const innerCommand = `cd ${shellQuote(repoRoot)} && ${innerEnv} node ${shellQuote(__filename)} --inner`;
-    herdrResult("pane send-text", ["pane", "send-text", parentPaneId, `${innerCommand}\n`]);
+    runHerdrRaw(["pane", "run", parentPaneId, innerCommand]);
 
     const result = await waitForResultFile(resultPath, parentPaneId);
     if (result.status !== "ok") {
@@ -384,7 +400,7 @@ async function runOuter() {
     if (result.nonShrinking !== true || result.childTabId === parentTabId) {
       throw new Error(`Herdr createSurface did not prove non-shrinking tab creation: ${JSON.stringify(result, null, 2)}`);
     }
-    if (!result.commandReadVerified || !result.asyncReadVerified || !result.titleRenameVerified || !result.closeCleanupVerified) {
+    if (!result.commandReadVerified || !result.asyncReadVerified || !result.titleRenameVerified || !result.closeCleanupVerified || !result.splitPaneVerified) {
       throw new Error(`Herdr mux live smoke did not verify all required behavior: ${JSON.stringify(result, null, 2)}`);
     }
 
@@ -403,6 +419,7 @@ async function runOuter() {
           childPaneId: result.childPaneId,
           childTabId: result.childTabId,
           nonShrinking: result.nonShrinking,
+          splitPaneVerified: result.splitPaneVerified,
           commandReadVerified: result.commandReadVerified,
           asyncReadVerified: result.asyncReadVerified,
           titleRenameVerified: result.titleRenameVerified,

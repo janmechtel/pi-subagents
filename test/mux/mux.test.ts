@@ -526,11 +526,11 @@ printf '%s\n' "$*" >> "$FAKE_CMUX_LOG"
 				const log = readFileSync(logFile, "utf8");
 				assert.match(log, /send --surface surface:42/);
 				assert.doesNotMatch(log, /FILLER='x{100}/);
-				assert.match(log, /pi-subagent-cmux-/);
+				assert.match(log, /pi-subagent-shell-/);
 				assert.match(log, /rm -f/);
 
 				const pathMatch = log.match(
-					/(\/[^\s']*pi-subagent-cmux-[^\s']+\.(?:sh|fish))/,
+					/(\/[^\s']*pi-subagent-shell-[^\s']+\.(?:sh|fish))/,
 				);
 				assert.ok(pathMatch);
 				stagedPath = pathMatch[1];
