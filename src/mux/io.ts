@@ -47,8 +47,12 @@ export function sendCommand(surface: string, command: string): void {
 		);
 		return;
 	}
-	zellijActionSync(["write-chars", command], surface);
-	zellijActionSync(["write", "13"], surface);
+	if (backend === "zellij") {
+		zellijActionSync(["write-chars", command], surface);
+		zellijActionSync(["write", "13"], surface);
+		return;
+	}
+	throw new Error("Herdr command delivery is not implemented yet");
 }
 
 function stageShellCommand(command: string): string {
@@ -105,12 +109,15 @@ export function readScreen(surface: string, lines = 50): string {
 		});
 		return tailLines(raw, lines);
 	}
-	const raw = execFileSync(
-		"zellij",
-		["action", "dump-screen", "--pane-id", zellijPaneId(surface)],
-		{ encoding: "utf8" },
-	);
-	return tailLines(raw, lines);
+	if (backend === "zellij") {
+		const raw = execFileSync(
+			"zellij",
+			["action", "dump-screen", "--pane-id", zellijPaneId(surface)],
+			{ encoding: "utf8" },
+		);
+		return tailLines(raw, lines);
+	}
+	throw new Error("Herdr screen reading is not implemented yet");
 }
 
 export async function readScreenAsync(surface: string, lines = 50): Promise<string> {
@@ -139,12 +146,15 @@ export async function readScreenAsync(surface: string, lines = 50): Promise<stri
 		);
 		return tailLines(stdout, lines);
 	}
-	const { stdout } = await execFileAsync(
-		"zellij",
-		["action", "dump-screen", "--pane-id", zellijPaneId(surface)],
-		{ encoding: "utf8" },
-	);
-	return tailLines(stdout, lines);
+	if (backend === "zellij") {
+		const { stdout } = await execFileAsync(
+			"zellij",
+			["action", "dump-screen", "--pane-id", zellijPaneId(surface)],
+			{ encoding: "utf8" },
+		);
+		return tailLines(stdout, lines);
+	}
+	throw new Error("Herdr async screen reading is not implemented yet");
 }
 
 export function closeSurface(surface: string): void {
@@ -165,5 +175,9 @@ export function closeSurface(surface: string): void {
 		});
 		return;
 	}
-	zellijActionSync(["close-pane"], surface);
+	if (backend === "zellij") {
+		zellijActionSync(["close-pane"], surface);
+		return;
+	}
+	throw new Error("Herdr surface cleanup is not implemented yet");
 }

@@ -37,6 +37,10 @@ export function createSurface(name: string): string {
 		return createZellijSurface(name);
 	}
 
+	if (backend === "herdr") {
+		throw new Error("Herdr surface creation is not implemented yet");
+	}
+
 	return createSurfaceSplit(name, "right");
 }
 
@@ -293,7 +297,9 @@ export function createSurfaceSplit(
 		return createTmuxSplit(name, direction, fromSurface);
 	if (backend === "wezterm")
 		return createWezTermSplit(name, direction, fromSurface);
-	return createZellijSplit(name, direction, fromSurface);
+	if (backend === "zellij")
+		return createZellijSplit(name, direction, fromSurface);
+	throw new Error("Herdr split surface creation is not implemented yet");
 }
 
 export function renameCurrentTab(title: string): void {
@@ -331,10 +337,14 @@ export function renameCurrentTab(title: string): void {
 		execFileSync("wezterm", args, { encoding: "utf8" });
 		return;
 	}
-	const paneId = process.env.ZELLIJ_PANE_ID;
-	if (paneId)
-		zellijActionSync(["rename-pane", title], `pane:${paneId}`);
-	else zellijActionSync(["rename-tab", title]);
+	if (backend === "zellij") {
+		const paneId = process.env.ZELLIJ_PANE_ID;
+		if (paneId)
+			zellijActionSync(["rename-pane", title], `pane:${paneId}`);
+		else zellijActionSync(["rename-tab", title]);
+		return;
+	}
+	throw new Error("Herdr tab renaming is not implemented yet");
 }
 
 export function renameWorkspace(title: string): void {
@@ -368,5 +378,8 @@ export function renameWorkspace(title: string): void {
 		try {
 			execFileSync("wezterm", args, { encoding: "utf8" });
 		} catch {}
+		return;
 	}
+	if (backend === "zellij") return;
+	throw new Error("Herdr workspace renaming is not implemented yet");
 }
