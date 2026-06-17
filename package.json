@@ -20,7 +20,8 @@
     "test:e2e-live-tools": "node scripts/test-e2e-live-tools.mjs",
     "test:e2e-live-extensions": "node scripts/test-e2e-live-extensions.mjs",
     "test:e2e-live-stop-after-turn": "node scripts/test-e2e-live-stop-after-turn.mjs",
-    "test:e2e-live-mixed-batch": "node scripts/test-e2e-live-mixed-batch.mjs"
+    "test:e2e-live-mixed-batch": "node scripts/test-e2e-live-mixed-batch.mjs",
+    "test:live-herdr-mux": "node scripts/test-live-herdr-mux.mjs"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.79.0",
