@@ -12,6 +12,8 @@ import {
 	join,
 	mkdirSync,
 	readFileSync,
+	enforceAgentFrontmatterForTest,
+	loadAgentDefaults,
 	readSubagentLaunchMetadataForTest,
 	sleep,
 	writeExecutable,
@@ -100,6 +102,12 @@ async function readEventually(path: string): Promise<string> {
 	throw new Error(`Timed out waiting for ${path}`);
 }
 
+function extractTaskArtifactPath(log: string): string {
+	const match = log.match(/'@([^']+)'/);
+	if (!match?.[1]) throw new Error("Expected Herdr launch command to include a task artifact argument");
+	return match[1];
+}
+
 describe("Herdr interactive launch parity", () => {
 	it("launches interactive Herdr children with resolved cwd, session, approval, and surface facts", async () => {
 		const { logFile } = useFakeHerdr();
@@ -178,6 +186,134 @@ describe("Herdr interactive launch parity", () => {
 		assert.match(log, /CUSTOM_ENV='from-agent'/);
 		assert.match(log, /PI_SUBAGENT_SURFACE='w1:p2'/);
 		assert.match(log, /'--alpha' 'two words'/);
+	});
+
+	it("launches interactive Herdr children with resolved capability, model, and lifecycle facts", async () => {
+		const { logFile } = useFakeHerdr();
+		const cwd = createTestDir();
+		process.env.PI_ARTIFACT_PROJECT_ROOT = join(cwd, "artifacts");
+		const agentConfigDir = join(cwd, "agent-config");
+		process.env.PI_CODING_AGENT_DIR = agentConfigDir;
+		mkdirSync(join(agentConfigDir, "agents"), { recursive: true });
+		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+		const skillDir = join(cwd, ".pi", "skills", "review");
+		mkdirSync(skillDir, { recursive: true });
+		const skillFile = join(skillDir, "SKILL.md");
+		writeFileSync(
+			skillFile,
+			[
+				"---",
+				"name: review",
+				"description: Review skill fixture.",
+				"---",
+				"Review skill body token.",
+			].join("\n"),
+		);
+		writeFileSync(
+			join(cwd, ".pi", "agents", "capability-lifecycle.md"),
+			[
+				"---",
+				"name: capability-lifecycle",
+				"model: zai-messages/glm-5-turbo",
+				"thinking: off",
+				"auto-exit: true",
+				"async: false",
+				"parent-close-policy: continue",
+				"tools: read,grep",
+				"deny-tools: grep,set_tab_title",
+				"extensions: none",
+				"skills: review",
+				"inject-skills: review",
+				"spawning: false",
+				"no-context-files: true",
+				"---",
+				"Preserve capability and lifecycle facts.",
+			].join("\n"),
+		);
+		const parentSession = writeParentSession(cwd);
+		const baseParams = {
+			name: "capability-child",
+			title: "Capability child",
+			task: "Check capability launch parity.",
+			agent: "capability-lifecycle",
+		};
+		const agentDefs = loadAgentDefaults("capability-lifecycle", undefined, cwd);
+		const effectiveParams = enforceAgentFrontmatterForTest(baseParams, agentDefs);
+		assert.equal(effectiveParams.async, false);
+		assert.equal(effectiveParams.blocking, true);
+		const contextWindowRefs: Array<string | undefined> = [];
+
+		const running = await launchInteractiveSubagent(
+			effectiveParams,
+			{
+				cwd,
+				parentModelRef: "parent/provider-model",
+				parentThinking: "medium",
+				sessionManager: {
+					getSessionFile: () => parentSession,
+					getSessionId: () => "parent-session-id",
+					getLeafId: () => "asst-001",
+				},
+			},
+			{
+				getContextWindow: (modelRef) => {
+					contextWindowRefs.push(modelRef);
+					return modelRef === "zai-messages/glm-5-turbo:off" ? 8192 : undefined;
+				},
+				getShellReadyDelayMs: () => 0,
+				waitForInteractivePrompt: async () => {},
+			},
+		);
+
+		assert.equal(running.mode, "interactive");
+		assert.equal(running.surface, "w1:p2");
+		assert.equal(running.autoExit, true);
+		assert.equal(running.async, false);
+		assert.equal(running.blocking, true);
+		assert.equal(running.parentClosePolicy, "continue");
+		assert.equal(running.modelRef, "zai-messages/glm-5-turbo:off");
+		assert.equal(running.modelContextWindow, 8192);
+		assert.deepEqual(contextWindowRefs, ["zai-messages/glm-5-turbo:off"]);
+
+		const metadata = readSubagentLaunchMetadataForTest(running.sessionFile);
+		assert.equal(metadata?.mode, "interactive");
+		assert.equal(metadata?.autoExit, true);
+		assert.equal(metadata?.async, false);
+		assert.equal(metadata?.parentClosePolicy, "continue");
+		assert.equal(metadata?.model, "zai-messages/glm-5-turbo");
+		assert.equal(metadata?.thinking, "off");
+		assert.equal(metadata?.modelRef, "zai-messages/glm-5-turbo:off");
+		assert.equal(metadata?.definitionModel, "zai-messages/glm-5-turbo");
+		assert.equal(metadata?.definitionThinking, "off");
+		assert.equal(metadata?.modelSource, "agent");
+		assert.equal(metadata?.tools, "read,grep");
+		assert.equal(metadata?.skills, "review");
+		assert.equal(metadata?.injectSkills, "review");
+		assert.deepEqual(metadata?.extensions, []);
+		assert.deepEqual(metadata?.denyTools, ["subagent", "subagent_resume", "grep", "set_tab_title"]);
+		assert.equal(metadata?.noContextFiles, true);
+
+		const log = readFileSync(logFile, "utf8");
+		assert.match(log, /tab create --workspace w1 --cwd .* --label capability-child --no-focus/);
+		assert.match(log, /PI_SUBAGENT_AUTO_EXIT='1'/);
+		assert.match(log, /PI_DENY_TOOLS='subagent,subagent_resume,grep,set_tab_title'/);
+		assert.match(log, /PI_SUBAGENT_EXTENSIONS=''/);
+		assert.match(log, /--model 'zai-messages\/glm-5-turbo:off'/);
+		assert.match(log, /--no-context-files/);
+		assert.match(log, /'--no-extensions' '-e' '.*\/tools\/subagent-done\.ts'/);
+		assert.equal(log.match(/'--tools' '([^']+)'/)?.[1], "read,grep,caller_ping,subagent_done");
+		assert.equal(
+			log.match(/'--exclude-tools' '([^']+)'/)?.[1],
+			"subagent,subagent_resume,grep,set_tab_title",
+		);
+		assert.match(log, new RegExp(`'--skill' '${skillFile.replace(/'/g, "'\\''")}'`));
+
+		const taskArtifact = readFileSync(extractTaskArtifactPath(log), "utf8");
+		assert.match(taskArtifact, /<skill name="review">/);
+		assert.match(taskArtifact, /Review skill body token\./);
+		assert.match(taskArtifact, /Complete your task autonomously\./);
+		assert.match(taskArtifact, /FINAL assistant message should summarize what you accomplished\./);
+		assert.doesNotMatch(taskArtifact, /set_tab_title/);
 	});
 
 	it("keeps background launches independent of Herdr mux availability", async () => {
