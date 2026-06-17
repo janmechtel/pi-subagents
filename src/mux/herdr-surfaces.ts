@@ -1,6 +1,8 @@
 import {
 	createHerdrTabSurface,
 	getHerdrCurrentPane,
+	renameHerdrTab,
+	renameHerdrWorkspace,
 	splitHerdrPane,
 } from "./herdr.ts";
 
@@ -45,4 +47,30 @@ export function createHerdrSplit(
 		cwd: process.cwd(),
 		focus: false,
 	}).paneId;
+}
+
+function currentHerdrTabId(): string {
+	const envTabId = process.env.HERDR_TAB_ID?.trim();
+	if (envTabId) return envTabId;
+	const tabId = getHerdrCurrentPane().tabId;
+	if (!tabId) throw new Error("Herdr current pane did not report a tab id");
+	return tabId;
+}
+
+function currentHerdrWorkspaceId(): string {
+	const envWorkspaceId = process.env.HERDR_WORKSPACE_ID?.trim();
+	if (envWorkspaceId) return envWorkspaceId;
+	const workspaceId = getHerdrCurrentPane().workspaceId;
+	if (!workspaceId) {
+		throw new Error("Herdr current pane did not report a workspace id");
+	}
+	return workspaceId;
+}
+
+export function renameHerdrCurrentTab(title: string): void {
+	renameHerdrTab(currentHerdrTabId(), title);
+}
+
+export function renameHerdrCurrentWorkspace(title: string): void {
+	renameHerdrWorkspace(currentHerdrWorkspaceId(), title);
 }

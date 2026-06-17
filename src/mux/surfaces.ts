@@ -6,7 +6,12 @@ import {
 	zellijActionSync,
 } from "./core.ts";
 import { createCmuxSplit, createCmuxSurface } from "./cmux-surfaces.ts";
-import { createHerdrSplit, createHerdrSurface } from "./herdr-surfaces.ts";
+import {
+	createHerdrSplit,
+	createHerdrSurface,
+	renameHerdrCurrentTab,
+	renameHerdrCurrentWorkspace,
+} from "./herdr-surfaces.ts";
 import { createZellijSurface } from "./zellij-placement.ts";
 
 const DEFAULT_INTERACTIVE_MIN_COLUMNS = 50;
@@ -345,7 +350,11 @@ export function renameCurrentTab(title: string): void {
 		else zellijActionSync(["rename-tab", title]);
 		return;
 	}
-	throw new Error("Herdr tab renaming is not implemented yet");
+	if (backend === "herdr") {
+		renameHerdrCurrentTab(title);
+		return;
+	}
+	throw new Error("Unsupported mux backend");
 }
 
 export function renameWorkspace(title: string): void {
@@ -382,5 +391,9 @@ export function renameWorkspace(title: string): void {
 		return;
 	}
 	if (backend === "zellij") return;
-	throw new Error("Herdr workspace renaming is not implemented yet");
+	if (backend === "herdr") {
+		renameHerdrCurrentWorkspace(title);
+		return;
+	}
+	throw new Error("Unsupported mux backend");
 }

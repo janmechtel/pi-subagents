@@ -1,5 +1,6 @@
 import {
 	assert,
+	closeSurface,
 	createSurface,
 	createSurfaceSplit,
 	createTestDir,
@@ -7,6 +8,12 @@ import {
 	it,
 	join,
 	readFileSync,
+	readScreen,
+	readScreenAsync,
+	renameCurrentTab,
+	renameWorkspace,
+	sendCommand,
+	sendShellCommand,
 	writeExecutable,
 	writeFileSync,
 	getMuxBackend,
@@ -112,6 +119,46 @@ if [ "$1" = "pane" ] && [ "$2" = "split" ]; then
   exit 0
 fi
 
+if [ "$1" = "pane" ] && [ "$2" = "send-text" ]; then
+  printf '%s\n' '{"id":"cli:pane:send-text","result":{"type":"pane_sent_text"}}'
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "send-keys" ]; then
+  printf '%s\n' '{"id":"cli:pane:send-keys","result":{"type":"pane_sent_keys"}}'
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "read" ]; then
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+  done < "$FAKE_HERDR_SCREEN"
+  exit 0
+fi
+
+if [ "$1" = "pane" ] && [ "$2" = "close" ]; then
+  if [ "$3" = "w1:closed" ]; then
+    printf '%s\n' '{"error":{"code":"pane_not_found","message":"pane already closed"},"id":"cli:pane:close"}'
+    exit 1
+  fi
+  if [ "$3" = "w1:bad" ]; then
+    printf '%s\n' '{"error":{"code":"permission_denied","message":"fake close refused"},"id":"cli:pane:close"}'
+    exit 1
+  fi
+  printf '%s\n' '{"id":"cli:pane:close","result":{"type":"pane_closed"}}'
+  exit 0
+fi
+
+if [ "$1" = "tab" ] && [ "$2" = "rename" ]; then
+  printf '%s\n' '{"id":"cli:tab:rename","result":{"type":"tab_renamed"}}'
+  exit 0
+fi
+
+if [ "$1" = "workspace" ] && [ "$2" = "rename" ]; then
+  printf '%s\n' '{"id":"cli:workspace:rename","result":{"type":"workspace_renamed"}}'
+  exit 0
+fi
+
 printf '%s\n' '{"error":{"code":"unknown_command","message":"unsupported fake herdr command"}}'
 exit 1
 `,
@@ -119,14 +166,21 @@ exit 1
 	return logFile;
 }
 
-function useFakeHerdr(mode = "available"): { dir: string; logFile: string } {
+function useFakeHerdr(mode = "available"): {
+	dir: string;
+	logFile: string;
+	screenFile: string;
+} {
 	const dir = createTestDir();
 	const logFile = writeFakeHerdr(dir);
+	const screenFile = join(dir, "herdr-screen.txt");
+	writeFileSync(screenFile, "herdr line 1\nherdr line 2\n");
 	clearMuxRuntimeEnv();
 	process.env.PATH = dir;
 	process.env.FAKE_HERDR_LOG = logFile;
 	process.env.FAKE_HERDR_MODE = mode;
-	return { dir, logFile };
+	process.env.FAKE_HERDR_SCREEN = screenFile;
+	return { dir, logFile, screenFile };
 }
 
 function writeFakeCommand(dir: string, command: string): void {
@@ -279,6 +333,70 @@ describe("Herdr mux backend", () => {
 				assert.doesNotMatch(log, /pane split/);
 			});
 		}
+	});
+
+	describe("I/O, titles, and cleanup", () => {
+		it("sends commands, empty Enter, shell commands, reads recent output, and closes panes", async () => {
+			const { logFile, screenFile } = useFakeHerdr();
+			process.env.PI_SUBAGENT_MUX = "herdr";
+			writeFileSync(
+				screenFile,
+				"herdr line 1\nherdr line 2\n__SUBAGENT_DONE_0__\n",
+			);
+
+			sendCommand("w1:p2", "echo herdr");
+			sendCommand("w1:p2", "");
+			sendShellCommand("w1:p2", "printf shell");
+
+			assert.match(readScreen("w1:p2", 10), /__SUBAGENT_DONE_0__/);
+			assert.match(await readScreenAsync("w1:p2", 10), /herdr line 2/);
+			closeSurface("w1:p2");
+
+			const log = readFileSync(logFile, "utf8");
+			assert.match(log, /pane send-text w1:p2 echo herdr/);
+			assert.match(log, /pane send-keys w1:p2 Enter/);
+			assert.match(log, /pane send-text w1:p2 printf shell/);
+			assert.match(
+				log,
+				/pane read w1:p2 --source recent --lines 10 --format text/,
+			);
+			assert.match(log, /pane close w1:p2/);
+		});
+
+		it("renames Herdr tab and workspace labels from environment or current pane metadata", () => {
+			const { logFile } = useFakeHerdr();
+			process.env.PI_SUBAGENT_MUX = "herdr";
+			process.env.HERDR_TAB_ID = "w1:t-env";
+			process.env.HERDR_WORKSPACE_ID = "w1-env";
+
+			renameCurrentTab("Env Tab");
+			renameWorkspace("Env Workspace");
+			delete process.env.HERDR_TAB_ID;
+			delete process.env.HERDR_WORKSPACE_ID;
+			renameCurrentTab("Current Tab");
+			renameWorkspace("Current Workspace");
+
+			const log = readFileSync(logFile, "utf8");
+			assert.match(log, /tab rename w1:t-env Env Tab/);
+			assert.match(log, /workspace rename w1-env Env Workspace/);
+			assert.match(log, /tab rename w1:t1 Current Tab/);
+			assert.match(log, /workspace rename w1 Current Workspace/);
+		});
+
+		it("ignores already-closed Herdr panes but propagates cleanup failures", () => {
+			const { logFile } = useFakeHerdr();
+			process.env.PI_SUBAGENT_MUX = "herdr";
+
+			assert.doesNotThrow(() => closeSurface("w1:closed"));
+			assert.throws(
+				() => closeSurface("w1:bad"),
+				/Herdr pane close failed: permission_denied: fake close refused/,
+			);
+
+			const log = readFileSync(logFile, "utf8");
+			assert.match(log, /pane close w1:closed/);
+			assert.match(log, /pane close w1:bad/);
+		});
 	});
 
 	describe("structured CLI adapter", () => {

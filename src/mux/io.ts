@@ -11,6 +11,13 @@ import {
 	zellijActionSync,
 	zellijPaneId,
 } from "./core.ts";
+import {
+	closeHerdrPane,
+	readHerdrPaneScreen,
+	readHerdrPaneScreenAsync,
+	sendHerdrPaneEnter,
+	sendHerdrPaneText,
+} from "./herdr.ts";
 
 export function sendCommand(surface: string, command: string): void {
 	const backend = requireMuxBackend();
@@ -52,7 +59,12 @@ export function sendCommand(surface: string, command: string): void {
 		zellijActionSync(["write", "13"], surface);
 		return;
 	}
-	throw new Error("Herdr command delivery is not implemented yet");
+	if (backend === "herdr") {
+		if (command.length > 0) sendHerdrPaneText(surface, `${command}\n`);
+		else sendHerdrPaneEnter(surface);
+		return;
+	}
+	throw new Error("Unsupported mux backend");
 }
 
 function stageShellCommand(command: string): string {
@@ -117,7 +129,8 @@ export function readScreen(surface: string, lines = 50): string {
 		);
 		return tailLines(raw, lines);
 	}
-	throw new Error("Herdr screen reading is not implemented yet");
+	if (backend === "herdr") return readHerdrPaneScreen(surface, lines);
+	throw new Error("Unsupported mux backend");
 }
 
 export async function readScreenAsync(surface: string, lines = 50): Promise<string> {
@@ -154,7 +167,8 @@ export async function readScreenAsync(surface: string, lines = 50): Promise<stri
 		);
 		return tailLines(stdout, lines);
 	}
-	throw new Error("Herdr async screen reading is not implemented yet");
+	if (backend === "herdr") return readHerdrPaneScreenAsync(surface, lines);
+	throw new Error("Unsupported mux backend");
 }
 
 export function closeSurface(surface: string): void {
@@ -179,5 +193,9 @@ export function closeSurface(surface: string): void {
 		zellijActionSync(["close-pane"], surface);
 		return;
 	}
-	throw new Error("Herdr surface cleanup is not implemented yet");
+	if (backend === "herdr") {
+		closeHerdrPane(surface);
+		return;
+	}
+	throw new Error("Unsupported mux backend");
 }

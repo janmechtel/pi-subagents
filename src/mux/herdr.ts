@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import { defaultMuxRuntimeProbe } from "./runtime-probe.ts";
 
 export type HerdrServerStatus = {
@@ -43,6 +44,26 @@ export type HerdrCreatedTabSurface = {
 };
 
 type HerdrProcessResult = ReturnType<typeof spawnSync>;
+type HerdrExecError = Error & {
+	code?: number | string;
+	signal?: NodeJS.Signals | string;
+	stdout?: string | Buffer;
+	stderr?: string | Buffer;
+};
+
+const execFileAsync = promisify(execFile);
+
+export class HerdrCommandError extends Error {
+	readonly operation: string;
+	readonly code?: string;
+
+	constructor(operation: string, message: string, code?: string) {
+		super(message);
+		this.name = "HerdrCommandError";
+		this.operation = operation;
+		this.code = code;
+	}
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return !!value && typeof value === "object" && !Array.isArray(value);
@@ -86,6 +107,12 @@ function getOutput(result: HerdrProcessResult): string {
 	return stdout.trim() || stderr.trim();
 }
 
+function outputText(value: string | Buffer | undefined): string {
+	if (typeof value === "string") return value;
+	if (Buffer.isBuffer(value)) return value.toString("utf8");
+	return "";
+}
+
 function parseHerdrJson(operation: string, output: string): unknown {
 	try {
 		return JSON.parse(output);
@@ -101,18 +128,40 @@ function formatHerdrApiError(
 	operation: string,
 	error: unknown,
 	fallback: string,
-): Error {
+): HerdrCommandError {
 	if (!isRecord(error)) {
-		return new Error(`Herdr ${operation} failed: ${fallback}`);
+		return new HerdrCommandError(
+			operation,
+			`Herdr ${operation} failed: ${fallback}`,
+		);
 	}
 	const code = stringField(error, "code");
 	const message = stringField(error, "message");
 	if (code && message) {
-		return new Error(`Herdr ${operation} failed: ${code}: ${message}`);
+		return new HerdrCommandError(
+			operation,
+			`Herdr ${operation} failed: ${code}: ${message}`,
+			code,
+		);
 	}
-	if (message) return new Error(`Herdr ${operation} failed: ${message}`);
-	if (code) return new Error(`Herdr ${operation} failed: ${code}`);
-	return new Error(`Herdr ${operation} failed: ${fallback}`);
+	if (message) {
+		return new HerdrCommandError(
+			operation,
+			`Herdr ${operation} failed: ${message}`,
+			code,
+		);
+	}
+	if (code) {
+		return new HerdrCommandError(
+			operation,
+			`Herdr ${operation} failed: ${code}`,
+			code,
+		);
+	}
+	return new HerdrCommandError(
+		operation,
+		`Herdr ${operation} failed: ${fallback}`,
+	);
 }
 
 function runHerdrJson(operation: string, args: string[]): unknown {
@@ -163,6 +212,45 @@ function runHerdrApi(operation: string, args: string[]): Record<string, unknown>
 		throw new Error(`Herdr ${operation} returned malformed API envelope: missing result`);
 	}
 	return result;
+}
+
+function runHerdrText(operation: string, args: string[]): string {
+	const result = spawnSync("herdr", args, { encoding: "utf8" });
+	if (result.error) {
+		throw new Error(
+			`Herdr ${operation} failed to start: ${result.error.message}`,
+		);
+	}
+	if (typeof result.status === "number" && result.status !== 0) {
+		throw new Error(
+			`Herdr ${operation} failed with exit code ${result.status}: ${trimForError(getOutput(result))}`,
+		);
+	}
+	return typeof result.stdout === "string" ? result.stdout : "";
+}
+
+async function runHerdrTextAsync(
+	operation: string,
+	args: string[],
+): Promise<string> {
+	try {
+		const { stdout } = await execFileAsync("herdr", args, {
+			encoding: "utf8",
+		});
+		return outputText(stdout);
+	} catch (error) {
+		const execError = error as HerdrExecError;
+		if (execError.code === "ENOENT") {
+			throw new Error(
+				`Herdr ${operation} failed to start: ${execError.message}`,
+			);
+		}
+		const output =
+			outputText(execError.stdout).trim() ||
+			outputText(execError.stderr).trim() ||
+			execError.message;
+		throw new Error(`Herdr ${operation} failed: ${trimForError(output)}`);
+	}
 }
 
 function parsePane(value: unknown, operation: string): HerdrPane {
@@ -295,6 +383,74 @@ export function splitHerdrPane(options: {
 	args.push(options.focus ? "--focus" : "--no-focus");
 	const result = runHerdrApi("pane split", args);
 	return parseCreatedPane(result, "pane split");
+}
+
+export function sendHerdrPaneText(paneId: string, text: string): void {
+	runHerdrApi("pane send-text", ["pane", "send-text", paneId, text]);
+}
+
+export function sendHerdrPaneEnter(paneId: string): void {
+	runHerdrApi("pane send-keys", ["pane", "send-keys", paneId, "Enter"]);
+}
+
+export function readHerdrPaneScreen(paneId: string, lines: number): string {
+	// Recent output supports child completion polling even after output scrolls
+	// out of the visible viewport, while still honoring the caller's line limit.
+	return runHerdrText("pane read", [
+		"pane",
+		"read",
+		paneId,
+		"--source",
+		"recent",
+		"--lines",
+		String(Math.max(1, lines)),
+		"--format",
+		"text",
+	]);
+}
+
+export function readHerdrPaneScreenAsync(
+	paneId: string,
+	lines: number,
+): Promise<string> {
+	return runHerdrTextAsync("pane read", [
+		"pane",
+		"read",
+		paneId,
+		"--source",
+		"recent",
+		"--lines",
+		String(Math.max(1, lines)),
+		"--format",
+		"text",
+	]);
+}
+
+function isAlreadyClosedHerdrPane(error: unknown): boolean {
+	return (
+		error instanceof HerdrCommandError &&
+		(error.code === "pane_not_found" || error.code === "not_found")
+	);
+}
+
+export function closeHerdrPane(paneId: string): void {
+	try {
+		runHerdrApi("pane close", ["pane", "close", paneId]);
+	} catch (error) {
+		if (isAlreadyClosedHerdrPane(error)) return;
+		throw error;
+	}
+}
+
+export function renameHerdrTab(tabId: string, title: string): void {
+	runHerdrApi("tab rename", ["tab", "rename", tabId, title]);
+}
+
+export function renameHerdrWorkspace(
+	workspaceId: string,
+	title: string,
+): void {
+	runHerdrApi("workspace rename", ["workspace", "rename", workspaceId, title]);
 }
 
 export function isHerdrRuntimeAvailable(
