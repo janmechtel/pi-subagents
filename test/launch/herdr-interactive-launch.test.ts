@@ -188,6 +188,73 @@ describe("Herdr interactive launch parity", () => {
 		assert.match(log, /'--alpha' 'two words'/);
 	});
 
+	it("honors an explicit Herdr mux preference at the launch seam", async () => {
+		const { logFile } = useFakeHerdr();
+		process.env.PI_SUBAGENT_MUX = "herdr";
+		const cwd = createTestDir();
+		process.env.PI_ARTIFACT_PROJECT_ROOT = join(cwd, "artifacts");
+		mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+		writeFileSync(
+			join(cwd, ".pi", "agents", "forced-herdr.md"),
+			[
+				"---",
+				"name: forced-herdr",
+				"mode: interactive",
+				"auto-exit: true",
+				"async: false",
+				"spawning: false",
+				"---",
+				"Launch through explicitly forced Herdr.",
+			].join("\n"),
+		);
+		const parentSession = writeParentSession(cwd);
+		const baseParams = {
+			name: "forced-herdr-child",
+			title: "Forced Herdr child",
+			task: "Check forced Herdr launch parity.",
+			agent: "forced-herdr",
+		};
+		const agentDefs = loadAgentDefaults("forced-herdr", undefined, cwd);
+		const effectiveParams = enforceAgentFrontmatterForTest(baseParams, agentDefs);
+		assert.equal(effectiveParams.async, false);
+		assert.equal(effectiveParams.blocking, true);
+
+		const running = await launchInteractiveSubagent(
+			effectiveParams,
+			{
+				cwd,
+				sessionManager: {
+					getSessionFile: () => parentSession,
+					getSessionId: () => "parent-session-id",
+					getLeafId: () => "asst-001",
+				},
+			},
+			{
+				getContextWindow: () => 4096,
+				getShellReadyDelayMs: () => 0,
+				waitForInteractivePrompt: async () => {},
+			},
+		);
+
+		assert.equal(running.mode, "interactive");
+		assert.equal(running.surface, "w1:p2");
+		assert.equal(running.async, false);
+		assert.equal(running.blocking, true);
+		assert.equal(running.autoExit, true);
+
+		const metadata = readSubagentLaunchMetadataForTest(running.sessionFile);
+		assert.equal(metadata?.mode, "interactive");
+		assert.equal(metadata?.autoExit, true);
+		assert.equal(metadata?.async, false);
+
+		const log = readFileSync(logFile, "utf8");
+		assert.match(log, /status server --json/);
+		assert.match(log, /pane current --current/);
+		assert.match(log, /tab create --workspace w1 --cwd .* --label forced-herdr-child --no-focus/);
+		assert.match(log, /pane send-text w1:p2 /);
+		assert.match(log, /PI_SUBAGENT_SURFACE='w1:p2'/);
+	});
+
 	it("launches interactive Herdr children with resolved capability, model, and lifecycle facts", async () => {
 		const { logFile } = useFakeHerdr();
 		const cwd = createTestDir();
