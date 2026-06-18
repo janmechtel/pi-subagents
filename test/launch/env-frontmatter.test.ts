@@ -117,4 +117,28 @@ describe("env frontmatter field", () => {
 		assert.notEqual(env.PI_SUBAGENT_NAME, "evil");
 		assert.equal(typeof env.PI_SUBAGENT_NAME, "string");
 	});
+
+	it("propagates PI_SUBAGENT_ENABLE_SET_TAB_TITLE to children when opted in", () => {
+		const original = process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+		process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = "1";
+		try {
+			const env = getBaseSubagentEnvVarsForTest(null);
+			assert.equal(env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE, "1");
+		} finally {
+			if (original == null) delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			else process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = original;
+		}
+	});
+
+	it("does not propagate PI_SUBAGENT_ENABLE_SET_TAB_TITLE when unset", () => {
+		const original = process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+		delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+		try {
+			const env = getBaseSubagentEnvVarsForTest(null);
+			assert.equal(env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE, undefined);
+		} finally {
+			if (original == null) delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			else process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = original;
+		}
+	});
 });

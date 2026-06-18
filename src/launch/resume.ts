@@ -105,7 +105,6 @@ export function resolveResumeLaunchMetadata(
 	sessionFile: string,
 	explicitMode?: ResumeMode,
 ): ResumeLaunchMetadata {
-	if (explicitMode) return { mode: explicitMode, modeSource: "explicit" };
 	const launchMetadata = readSubagentLaunchMetadata(sessionFile);
 	if (launchMetadata) {
 		return {
@@ -137,6 +136,10 @@ export function resolveResumeLaunchMetadata(
 		} catch {}
 	}
 
+	// Persisted launch metadata is authoritative. The explicit mode argument is
+	// only a fallback when no metadata can be inferred, matching the
+	// subagent_resume tool description.
+	if (explicitMode) return { mode: explicitMode, modeSource: "explicit" };
 	return { mode: "interactive", modeSource: "fallback" };
 }
 

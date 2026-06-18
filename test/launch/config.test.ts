@@ -727,9 +727,61 @@ describe("agent launch configuration", () => {
 			blocking: undefined,
 			async: undefined,
 		});
+		// Persisted metadata wins over an explicit resume mode argument; an
+		// explicit mode is only consulted when metadata cannot be inferred.
 		assert.deepEqual(resolveResumeLaunchMetadataForTest(child, "interactive"), {
+			mode: "background",
+			modeSource: "metadata",
+			agent: "bg-mode",
+			name: "Worker",
+			autoExit: true,
+			parentClosePolicy: "continue",
+			blocking: undefined,
+			async: undefined,
+		});
+	});
+
+	it("keeps persisted interactive metadata when resumed with an explicit background mode", async () => {
+		const dir = createTestDir();
+		const child = join(dir, "interactive-metadata-child.jsonl");
+		await writeSubagentLaunchMetadataEntryForTest(child, {
+			version: 1,
+			timestamp: "2026-05-08T00:00:00.000Z",
+			name: "interactive-child",
 			mode: "interactive",
-			modeSource: "explicit",
+			sessionMode: "fork",
+			autoExit: true,
+			parentClosePolicy: "terminate",
+			async: false,
+			denyTools: [],
+			noContextFiles: false,
+			noSession: false,
+			agentConfigDir: dir,
+			cwd: dir,
+			boundarySystemPrompt: true,
+		});
+
+		assert.deepEqual(resolveResumeLaunchMetadataForTest(child), {
+			mode: "interactive",
+			modeSource: "metadata",
+			agent: undefined,
+			name: "interactive-child",
+			autoExit: true,
+			parentClosePolicy: "terminate",
+			blocking: undefined,
+			async: false,
+		});
+		// The regression: an explicit background mode must not flip an interactive
+		// child to background when persisted metadata is present.
+		assert.deepEqual(resolveResumeLaunchMetadataForTest(child, "background"), {
+			mode: "interactive",
+			modeSource: "metadata",
+			agent: undefined,
+			name: "interactive-child",
+			autoExit: true,
+			parentClosePolicy: "terminate",
+			blocking: undefined,
+			async: false,
 		});
 	});
 

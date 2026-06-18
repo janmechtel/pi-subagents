@@ -475,5 +475,73 @@ describe("subagent-done.ts", () => {
 			}
 		});
 	});
+
+	describe("set_tab_title registration", () => {
+		function loadChildExtension() {
+			const tools = new Map<string, any>();
+			subagentDoneExtension({
+				getAllTools: () => [],
+				getActiveTools: () => [],
+				setActiveTools() {},
+				registerTool(definition: { name: string }) {
+					tools.set(definition.name, definition);
+					return definition;
+				},
+				on() {},
+				registerShortcut() {},
+			} as any);
+			return tools;
+		}
+
+		it("registers set_tab_title when PI_SUBAGENT_ENABLE_SET_TAB_TITLE is enabled", () => {
+			const original = process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			const originalDeny = process.env.PI_DENY_TOOLS;
+			process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = "1";
+			delete process.env.PI_DENY_TOOLS;
+			try {
+				const tools = loadChildExtension();
+				assert.ok(tools.has("set_tab_title"), "child extension should register set_tab_title");
+				const tool = tools.get("set_tab_title");
+			assert.equal(tool.label, "Set Tab Title");
+			} finally {
+				if (original == null) delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+				else process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = original;
+				if (originalDeny == null) delete process.env.PI_DENY_TOOLS;
+				else process.env.PI_DENY_TOOLS = originalDeny;
+			}
+		});
+
+		it("does not register set_tab_title when the opt-in is disabled", () => {
+			const original = process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			const originalDeny = process.env.PI_DENY_TOOLS;
+			delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			delete process.env.PI_DENY_TOOLS;
+			try {
+				const tools = loadChildExtension();
+				assert.equal(tools.has("set_tab_title"), false);
+			} finally {
+				if (original == null) delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+				else process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = original;
+				if (originalDeny == null) delete process.env.PI_DENY_TOOLS;
+				else process.env.PI_DENY_TOOLS = originalDeny;
+			}
+		});
+
+		it("does not register set_tab_title when the agent denies it", () => {
+			const original = process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+			const originalDeny = process.env.PI_DENY_TOOLS;
+			process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = "1";
+			process.env.PI_DENY_TOOLS = "set_tab_title";
+			try {
+				const tools = loadChildExtension();
+				assert.equal(tools.has("set_tab_title"), false);
+			} finally {
+				if (original == null) delete process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE;
+				else process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = original;
+				if (originalDeny == null) delete process.env.PI_DENY_TOOLS;
+				else process.env.PI_DENY_TOOLS = originalDeny;
+			}
+		});
+	});
 });
 

@@ -95,7 +95,7 @@ export function registerSubagentResumeTool(
 					],
 					{
 						description:
-							"Explicit resume mode when launch metadata cannot be inferred. Defaults to the original mode when known, otherwise interactive fallback.",
+							"Fallback resume mode used only when launch metadata cannot be inferred. Persisted metadata always wins when present; an explicit mode here cannot override it.",
 					},
 				),
 			),

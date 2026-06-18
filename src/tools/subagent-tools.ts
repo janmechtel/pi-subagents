@@ -9,14 +9,14 @@ import {
 	resolveSubagentBlocking,
 } from "../launch/policy.ts";
 import type { SubagentLaunchContext } from "../launch/prep.ts";
-import { isMuxAvailable, renameCurrentTab, renameWorkspace } from "../mux.ts";
+import { isMuxAvailable } from "../mux.ts";
 import { findRunningSubagent } from "../runtime/running-registry.ts";
 import type { RunningSubagent, SubagentParamsInput, SubagentResult } from "../types.ts";
 import { asSubagentToolResult, getCoordinatorOnlyTurnPrompt, getSubagentBatchStopMetadata, markSubagentBatchBlocking } from "../runtime/state.ts";
 
-import { isSetTabTitleToolEnabled } from "../agents/titles.ts";
 import { formatSubagentBatchLines, formatTaskPreview, renderSubagentCompletionText } from "./message-renderers.ts";
 import { getSubagentToolsConfigError } from "./policy.ts";
+import { registerSetTabTitleTool } from "./set-tab-title.ts";
 import {
 	SET_TAB_TITLE_TOOL_NAME,
 	SUBAGENT_KILL_TOOL_NAME,
@@ -375,20 +375,5 @@ export function registerSubagentCoreTools(
 		},
 	});
 
-	if (isSetTabTitleToolEnabled() && shouldRegister(SET_TAB_TITLE_TOOL_NAME)) pi.registerTool({
-		name: SET_TAB_TITLE_TOOL_NAME, label: "Set Tab Title",
-		description: "Update the current tab/window and workspace/session title. Use to show progress during multi-phase workflows (e.g. setup, executing todos, reviewing). Keep titles short and informative.",
-		promptSnippet: "Update the current tab/window and workspace/session title. Use to show progress during multi-phase workflows (e.g. setup, executing todos, reviewing). Keep titles short and informative.",
-		parameters: Type.Object({ title: Type.String({ description: "New tab title (also applied to workspace/session when supported)" }) }),
-		execute: async (_toolCallId, params) => {
-			if (!isMuxAvailable()) return asSubagentToolResult(runtime.muxUnavailableResult("tab-title"));
-			try {
-				renameCurrentTab(params.title); renameWorkspace(params.title);
-				return asSubagentToolResult({ content: [{ type: "text" as const, text: `Title set to: ${params.title}` }], details: { title: params.title } });
-			} catch (err: unknown) {
-				const errorMessage = err instanceof Error ? err.message : String(err);
-				return asSubagentToolResult({ content: [{ type: "text" as const, text: `Failed to set title: ${errorMessage}` }], details: { error: errorMessage } });
-			}
-		},
-	});
+	if (shouldRegister(SET_TAB_TITLE_TOOL_NAME)) registerSetTabTitleTool(pi);
 }

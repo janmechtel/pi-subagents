@@ -15,6 +15,10 @@ import {
 	CALLER_PING_TOOL_NAME,
 	SUBAGENT_DONE_TOOL_NAME,
 } from "./tool-names.ts";
+import {
+	registerSetTabTitleTool,
+	shouldRegisterSetTabTitleTool,
+} from "./set-tab-title.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -366,5 +370,13 @@ export default function (pi: ExtensionAPI) {
 				};
 			},
 		});
+	}
+
+	// set_tab_title is a child-side protocol tool (see SUBAGENT_PROTOCOL_TOOL_NAMES).
+	// The mandatory child extension registers it under the same opt-in as the
+	// parent so the declared contract holds even when `extensions: none` strips
+	// the main pi-subagents extension from the child.
+	if (shouldRegisterSetTabTitleTool(new Set(denied))) {
+		registerSetTabTitleTool(pi);
 	}
 }

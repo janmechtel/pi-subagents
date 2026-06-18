@@ -386,6 +386,9 @@ export function getBaseSubagentEnvVars(
 	if (prepared.effectiveExtensions !== undefined) {
 		envVars.PI_SUBAGENT_EXTENSIONS = prepared.effectiveExtensions.join(",");
 	}
+	if (process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE === "1") {
+		envVars.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = "1";
+	}
 	envVars.PI_SUBAGENT_NAME = params.name;
 	if (params.agent) envVars.PI_SUBAGENT_AGENT = params.agent;
 	const sessionMode = resolveEffectiveSessionMode(params, prepared.agentDefs);

@@ -250,7 +250,7 @@ describe("subagent_resume approval args", () => {
 		}
 	});
 
-	it("uses the explicit background resume mode for persisted approval policy", async () => {
+	it("uses the persisted metadata mode for resume approval policy, ignoring an explicit mode argument", async () => {
 		const dir = createTestDir();
 		const bin = writeExecutable(dir, "capture-pi", `#!/usr/bin/env bash\nexit 0\n`);
 		const originalCommand = process.env.PI_SUBAGENT_PI_COMMAND;
@@ -264,8 +264,8 @@ describe("subagent_resume approval args", () => {
 			await writeSubagentLaunchMetadataEntryForTest(sessionFile, {
 				version: 1,
 				timestamp: new Date().toISOString(),
-				name: "trusted-interactive",
-				mode: "interactive",
+				name: "trusted-background",
+				mode: "background",
 				sessionMode: "lineage-only",
 				autoExit: true,
 				parentClosePolicy: "terminate",
@@ -279,14 +279,17 @@ describe("subagent_resume approval args", () => {
 				boundarySystemPrompt: false,
 			});
 
+			// Persisted metadata (background) wins over the explicit interactive
+			// mode argument, so the resume stays background and uses --no-approve.
 			const running = await resumeSubagentSession(
-				{ sessionFile, mode: "background" },
+				{ sessionFile, mode: "interactive" },
 				createResumeRuntime(),
 			);
 			const approvalArgs = running.childProcess?.spawnargs.filter(
 				(arg) => arg === "--approve" || arg === "--no-approve",
 			) ?? [];
 
+			assert.equal(running.mode, "background");
 			assert.deepEqual(approvalArgs, ["--no-approve"]);
 		} finally {
 			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;

@@ -230,6 +230,9 @@ export async function resumeSubagentSession(
 	} else if (process.env.PI_SUBAGENT_EXTENSIONS) {
 		resumeEnvVars.PI_SUBAGENT_EXTENSIONS = process.env.PI_SUBAGENT_EXTENSIONS;
 	}
+	if (process.env.PI_SUBAGENT_ENABLE_SET_TAB_TITLE === "1") {
+		resumeEnvVars.PI_SUBAGENT_ENABLE_SET_TAB_TITLE = "1";
+	}
 	resumeEnvVars.PI_SUBAGENT_NAME = invocationMetadata?.name ?? name;
 	if (resumedAgent) resumeEnvVars.PI_SUBAGENT_AGENT = resumedAgent;
 	resumeEnvVars.PI_SUBAGENT_SESSION = sessionFile;
