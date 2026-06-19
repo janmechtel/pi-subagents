@@ -25,7 +25,6 @@ export type HerdrTab = {
 	tabId: string;
 	workspaceId?: string;
 	label?: string;
-	number?: number;
 	focused?: boolean;
 	paneCount?: number;
 };
@@ -320,7 +319,6 @@ function parseTab(value: unknown, operation: string): HerdrTab {
 		tabId,
 		workspaceId: stringField(value, "workspace_id"),
 		label: stringField(value, "label"),
-		number: numberField(value, "number"),
 		focused: booleanField(value, "focused"),
 		paneCount: numberField(value, "pane_count"),
 	};
@@ -398,6 +396,14 @@ export function getHerdrCurrentPane(): HerdrPane {
 export function getHerdrTab(tabId: string): HerdrTab {
 	const result = runHerdrApi("tab get", ["tab", "get", tabId]);
 	return parseTab(result.tab, "tab get");
+}
+
+export function listHerdrTabs(workspaceId?: string): HerdrTab[] {
+	const args = ["tab", "list"];
+	if (workspaceId) args.push("--workspace", workspaceId);
+	const result = runHerdrApi("tab list", args);
+	const tabs = Array.isArray(result.tabs) ? result.tabs : [];
+	return tabs.map((tab) => parseTab(tab, "tab list"));
 }
 
 export function getHerdrWorkspace(workspaceId: string): HerdrWorkspace {

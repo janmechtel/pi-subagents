@@ -96,7 +96,12 @@ if [ "$cmd" = "pane current --current" ]; then
 fi
 
 if [ "$cmd" = "tab get w1:t1" ]; then
-  printf '%s\n' '{"id":"cli:tab:get","result":{"type":"tab_info","tab":{"tab_id":"w1:t1","workspace_id":"w1","label":"One","number":1,"focused":true,"pane_count":1}}}'
+  printf '%s\n' '{"id":"cli:tab:get","result":{"type":"tab_info","tab":{"tab_id":"w1:t1","workspace_id":"w1","label":"One","focused":true,"pane_count":1}}}'
+  exit 0
+fi
+
+if [ "$1" = "tab" ] && [ "$2" = "list" ]; then
+  printf '%s\n' '{"id":"cli:tab:list","result":{"type":"tab_list","tabs":[{"tab_id":"w1:t1","workspace_id":"w1","label":"One","focused":true,"pane_count":1},{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1}]}}'
   exit 0
 fi
 
@@ -108,10 +113,10 @@ fi
 if [ "$1" = "tab" ] && [ "$2" = "create" ]; then
   case "$mode" in
     tab-created-without-pane)
-      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","number":2,"focused":false,"pane_count":1}}}'
+      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1}}}'
       ;;
     *)
-      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","number":2,"focused":false,"pane_count":1},"root_pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
+      printf '%s\n' '{"id":"cli:tab:create","result":{"type":"tab_created","tab":{"tab_id":"w1:t2","workspace_id":"w1","label":"Child","focused":false,"pane_count":1},"root_pane":{"pane_id":"w1:p2","tab_id":"w1:t2","workspace_id":"w1","cwd":"/workspace/app","focused":false}}}'
       ;;
   esac
   exit 0
@@ -454,7 +459,7 @@ describe("Herdr mux backend", () => {
 			assert.match(log, /workspace rename w1 Current Workspace/);
 		});
 
-		it("prefixes Herdr child tab labels with the tab number", () => {
+		it("prefixes Herdr child tab labels with the positional tab index", () => {
 			const { logFile } = useFakeHerdr();
 			process.env.PI_SUBAGENT_MUX = "herdr";
 			process.env.PI_SUBAGENT_NAME = "scout-child";
@@ -463,7 +468,7 @@ describe("Herdr mux backend", () => {
 			delete process.env.PI_SUBAGENT_NAME;
 
 			const log = readFileSync(logFile, "utf8");
-			assert.match(log, /tab get w1:t1/);
+			assert.match(log, /tab list --workspace w1/);
 			assert.match(log, /tab rename w1:t1 1: \[scout\] Exploring auth implementation/);
 		});
 
@@ -508,7 +513,6 @@ describe("Herdr mux backend", () => {
 				tabId: "w1:t1",
 				workspaceId: "w1",
 				label: "One",
-				number: 1,
 				focused: true,
 				paneCount: 1,
 			});

@@ -1,7 +1,7 @@
 import {
 	createHerdrTabSurface,
 	getHerdrCurrentPane,
-	getHerdrTab,
+	listHerdrTabs,
 	renameHerdrTab,
 	renameHerdrWorkspace,
 	splitHerdrPane,
@@ -28,6 +28,12 @@ function isSubagentProcess(): boolean {
 	return !!(process.env.PI_SUBAGENT_NAME || process.env.PI_SUBAGENT_SESSION);
 }
 
+function herdrTabPosition(workspaceId: string, tabId: string): number | undefined {
+	const tabs = listHerdrTabs(workspaceId);
+	const index = tabs.findIndex((tab) => tab.tabId === tabId);
+	return index === -1 ? undefined : index + 1;
+}
+
 export function createHerdrSurface(name: string): string {
 	const parentPane = getHerdrCurrentPane();
 	const surface = createHerdrTabSurface({
@@ -45,7 +51,12 @@ export function createHerdrSurface(name: string): string {
 
 	renameHerdrTab(
 		surface.tab.tabId,
-		numberedHerdrTabTitle(name, surface.tab.number),
+		numberedHerdrTabTitle(
+			name,
+			parentPane.workspaceId
+				? herdrTabPosition(parentPane.workspaceId, surface.tab.tabId)
+				: undefined,
+		),
 	);
 	return surface.pane.paneId;
 }
@@ -88,8 +99,8 @@ export function renameHerdrCurrentTab(title: string): void {
 		renameHerdrTab(tabId, title);
 		return;
 	}
-	const tab = getHerdrTab(tabId);
-	renameHerdrTab(tabId, numberedHerdrTabTitle(title, tab.number));
+	const workspaceId = currentHerdrWorkspaceId();
+	renameHerdrTab(tabId, numberedHerdrTabTitle(title, herdrTabPosition(workspaceId, tabId)));
 }
 
 export function renameHerdrCurrentWorkspace(title: string): void {
