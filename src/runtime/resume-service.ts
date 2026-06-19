@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { getArtifactStorageRoot } from "../artifact-storage.ts";
 import { getPiInvocation, getPiShellParts, getSubagentChildProcessEnv } from "../launch/child-command.ts";
 import { writeResumeTaskArtifact } from "../launch/prompt-artifacts.ts";
+import { expandSubagentTask } from "../launch/task-expansion.ts";
 import { parseEnvString } from "../launch/env.ts";
 import { assertModelAllowed, buildModelRef } from "../agents/model-refs.ts";
 import {
@@ -206,6 +207,12 @@ export async function resumeSubagentSession(
 		...(invocationMetadata ? [] : ["--no-approve"]),
 	];
 	const resumeCwd = getResumeCwd(invocationMetadata);
+	const expandedTask = task
+		? await expandSubagentTask(task, {
+			enabled: invocationMetadata?.taskExpansion === "shell",
+			cwd: resumeCwd ?? process.cwd(),
+		})
+		: undefined;
 
 	const resumedAgent = invocationMetadata?.agent ?? metadata.agent ?? input.agent;
 
@@ -282,8 +289,8 @@ export async function resumeSubagentSession(
 					: (["pipe", "pipe", "pipe"] as const),
 			env: getSubagentChildProcessEnv(invocation, resumeEnvVars),
 		});
-		if (task) {
-			child.stdin?.end(task);
+		if (expandedTask !== undefined) {
+			child.stdin?.end(expandedTask);
 		} else {
 			child.stdin?.end();
 		}
@@ -309,10 +316,10 @@ export async function resumeSubagentSession(
 		for (const arg of [...extensionArgs, ...parityArgs]) {
 			parts.push(shellEscape(arg));
 		}
-		if (task) {
+		if (expandedTask !== undefined) {
 			const taskPath = writeResumeTaskArtifact(
 				name,
-				task,
+				expandedTask,
 				sessionFile,
 				resumeCwd ?? process.cwd(),
 			);

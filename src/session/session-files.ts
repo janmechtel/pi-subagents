@@ -63,6 +63,7 @@ export interface PersistedSubagentLaunchMetadata {
 	systemPromptMode?: "append" | "replace";
 	systemPrompt?: string;
 	boundarySystemPrompt: boolean;
+	taskExpansion?: "shell";
 
 	flags?: string;
 	env?: string;

@@ -27,6 +27,7 @@ import {
 } from "../session/session-files.ts";
 import { coordinateSubagentLaunch } from "./launch-coordinator.ts";
 import { writeTaskArtifact } from "./prompt-artifacts.ts";
+import { expandSubagentTask } from "./task-expansion.ts";
 import { getSubagentDisplayTitle } from "../agents/titles.ts";
 import { getSubagentToolLaunchArgs } from "../tools/policy.ts";
 import { clearSubagentExitSidecar } from "../session/exit-sidecar.ts";
@@ -57,9 +58,13 @@ export async function launchBackgroundSubagent(
 	const summaryInstruction = prepared.agentDefs?.autoExit
 		? "Your FINAL assistant message should summarize what you accomplished."
 		: "Your FINAL assistant message before calling subagent_done, or before asking for manual close, should summarize what you accomplished. After that final message, immediately call subagent_done.";
+	const expandedTask = await expandSubagentTask(params.task, {
+		enabled: prepared.agentDefs?.taskExpansion === "shell",
+		cwd: prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
+	});
 	let fullTask = directTask
-		? params.task
-		: `${roleBlock}\n\n${modeHint}\n\n${params.task}\n\n${summaryInstruction}`;
+		? expandedTask
+		: `${roleBlock}\n\n${modeHint}\n\n${expandedTask}\n\n${summaryInstruction}`;
 	const skillInjection = getPreparedSkillInjection(prepared);
 	if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
 

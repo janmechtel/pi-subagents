@@ -356,6 +356,9 @@ export function buildPersistedSubagentLaunchMetadata(
 			: {}),
 		...(systemPrompt ? { systemPrompt } : {}),
 		boundarySystemPrompt,
+		...(prepared.agentDefs?.taskExpansion
+			? { taskExpansion: prepared.agentDefs.taskExpansion }
+			: {}),
 
 		...(prepared.agentDefs?.flags ? { flags: prepared.agentDefs.flags } : {}),
 		...(prepared.agentDefs?.env ? { env: prepared.agentDefs.env } : {}),

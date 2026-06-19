@@ -34,6 +34,7 @@ import {
 } from "../session/session-files.ts";
 import { coordinateSubagentLaunch } from "./launch-coordinator.ts";
 import { writeSystemPromptArtifact, writeTaskArtifact } from "./prompt-artifacts.ts";
+import { expandSubagentTask } from "./task-expansion.ts";
 import { traceSubagentLaunch } from "./trace.ts";
 import {
 	getSubagentDisplayTitle,
@@ -99,9 +100,13 @@ export async function launchInteractiveSubagent(
 			`The title MUST start with [${agentType}] followed by a short description of your current task. ` +
 			`Example: "[${agentType}] Analyzing auth module". Keep it concise.`;
 	const roleBlock = getPreparedRoleBlock(prepared);
+	const expandedTask = await expandSubagentTask(params.task, {
+		enabled: prepared.agentDefs?.taskExpansion === "shell",
+		cwd: prepared.runtimePaths.effectiveCwd ?? ctx.cwd,
+	});
 	let fullTask = directTask
-		? params.task
-		: `${roleBlock}\n\n${modeHint}\n\n${tabTitleInstruction}\n\n${params.task}\n\n${summaryInstruction}`;
+		? expandedTask
+		: `${roleBlock}\n\n${modeHint}\n\n${tabTitleInstruction}\n\n${expandedTask}\n\n${summaryInstruction}`;
 	const skillInjection = getPreparedSkillInjection(prepared);
 	if (skillInjection) fullTask = `${skillInjection}\n\n${fullTask}`;
 

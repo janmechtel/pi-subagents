@@ -29,6 +29,7 @@ export interface AgentDefaults {
 	noSession?: boolean;
 	trustProject?: boolean;
 	timeout?: number;
+	taskExpansion?: "shell";
 
 	flags?: string;
 	env?: string;
@@ -87,7 +88,7 @@ function parseAgentDefinition(
 	const noSessionRaw = get("no-session");
 	const trustProjectRaw = get("trust-project");
 	const timeoutRaw = get("timeout");
-
+	const taskExpansionRaw = get("task-expansion");
 
 	const systemPromptRaw = get("system-prompt");
 	const extensionsRaw = get("extensions");
@@ -143,6 +144,7 @@ function parseAgentDefinition(
 				? modeRaw
 				: undefined,
 		timeout: timeoutRaw != null ? parseInt(timeoutRaw, 10) : undefined,
+		taskExpansion: taskExpansionRaw === "shell" ? "shell" : undefined,
 
 		flags: flagsRaw,
 		env: getBlock("env"),

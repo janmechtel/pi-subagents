@@ -8,6 +8,7 @@ import "./tools/message-renderers.test.ts";
 import "./artifacts/storage.test.ts";
 import "./launch/child-launch-plan.test.ts";
 import "./launch/launch-coordinator.test.ts";
+import "./launch/task-expansion.test.ts";
 import "./launch/herdr-interactive-launch.test.ts";
 import "./launch/config.test.ts";
 import "./launch/resume-model-config.test.ts";

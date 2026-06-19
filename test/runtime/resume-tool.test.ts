@@ -16,9 +16,22 @@ import {
 	writeExecutable,
 	readFileSync,
 	mkdirSync,
+	existsSync,
 } from "../support/index.ts";
 import { resolve } from "node:path";
 import { resumeSubagentSession } from "../../src/runtime/resume-service.ts";
+
+async function readNonEmptyFileEventually(path: string): Promise<string> {
+	let lastText = "";
+	for (let attempt = 0; attempt < 50; attempt++) {
+		if (existsSync(path)) {
+			lastText = readFileSync(path, "utf8");
+			if (lastText.length > 0) return lastText;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
+	throw new Error(`Timed out waiting for ${path}; last content: ${lastText}`);
+}
 
 describe("subagent_resume name identity", () => {
 	it("resolves canonical name from persisted launch metadata", async () => {
@@ -298,7 +311,7 @@ describe("subagent_resume approval args", () => {
 	});
 });
 
-describe("subagent_resume interactive prompt delivery", () => {
+describe("subagent_resume prompt delivery", () => {
 	it("writes follow-up text to a resume artifact without trimming user content", () => {
 		const dir = createTestDir();
 		const sessionFile = join(dir, "child.jsonl");
@@ -326,6 +339,126 @@ describe("subagent_resume interactive prompt delivery", () => {
 
 		assert.doesNotMatch(artifactPath, /\.\.\/\.\.\/evil\/session|evil\/session/);
 		assert.match(artifactPath, /\.\.-\.\.-evil-session\/context\/resume-child-/);
+	});
+
+	it("expands follow-up task placeholders when original launch opted in", async () => {
+		const dir = createTestDir();
+		const binDir = join(dir, "bin");
+		mkdirSync(binDir, { recursive: true });
+		const logFile = join(dir, "tmux.log");
+		writeExecutable(binDir, "tmux", `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_TMUX_LOG"
+case "$1" in
+  new-window) printf '%%42\\n' ;;
+esac
+`);
+		process.env.PATH = `${binDir}:${process.env.PATH ?? ""}`;
+		process.env.PI_SUBAGENT_MUX = "tmux";
+		process.env.TMUX = "fake-tmux-socket";
+		process.env.FAKE_TMUX_LOG = logFile;
+
+		const sessionFile = join(dir, "child.jsonl");
+		writeFileSync(
+			sessionFile,
+			JSON.stringify({ type: "session", version: 3, id: "child-session", timestamp: new Date().toISOString(), cwd: dir }) + "\n",
+		);
+		await writeSubagentLaunchMetadataEntryForTest(sessionFile, {
+			version: 1,
+			timestamp: new Date().toISOString(),
+			name: "resume-child",
+			agent: "scout",
+			mode: "interactive",
+			sessionMode: "fork",
+			autoExit: true,
+			parentClosePolicy: "terminate",
+			async: true,
+			denyTools: [],
+			noContextFiles: false,
+			noSession: false,
+			agentConfigDir: dir,
+			cwd: dir,
+			boundarySystemPrompt: false,
+			taskExpansion: "shell",
+		});
+
+		await resumeSubagentSession(
+			{ sessionFile, task: "Follow-up marker: !`printf resume-marker`" },
+			{
+				isMuxAvailable: () => true,
+				getShellReadyDelayMs: () => 0,
+				waitForInteractivePrompt: async () => {},
+				watchBackgroundSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+				watchSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+				getWatcherSignal: (_running: any, controller: AbortController) => controller.signal,
+				startWidgetRefresh: () => {},
+				getContextWindow: () => undefined,
+				runningSubagents: new Map<string, any>(),
+			},
+		);
+
+		const log = readFileSync(logFile, "utf8");
+		const artifactPath = log.match(/@([^'\s]+child-session[^'\s]+)/)?.[1];
+		assert.ok(artifactPath);
+		const artifact = readFileSync(artifactPath, "utf8");
+		assert.match(artifact, /Follow-up marker: resume-marker/);
+		assert.doesNotMatch(artifact, /!`printf resume-marker`/);
+	});
+
+	it("expands follow-up task placeholders for background resumes", async () => {
+		const dir = createTestDir();
+		const stdinLog = join(dir, "stdin.log");
+		const bin = writeExecutable(dir, "capture-pi", `#!/usr/bin/env bash
+cat > '${stdinLog}'
+`);
+		const originalCommand = process.env.PI_SUBAGENT_PI_COMMAND;
+		process.env.PI_SUBAGENT_PI_COMMAND = bin;
+		try {
+			const sessionFile = join(dir, "child.jsonl");
+			writeFileSync(
+				sessionFile,
+				JSON.stringify({ type: "session", version: 3, id: "child-session", timestamp: new Date().toISOString(), cwd: dir }) + "\n",
+			);
+			await writeSubagentLaunchMetadataEntryForTest(sessionFile, {
+				version: 1,
+				timestamp: new Date().toISOString(),
+				name: "resume-child",
+				agent: "scout",
+				mode: "background",
+				sessionMode: "lineage-only",
+				autoExit: true,
+				parentClosePolicy: "terminate",
+				async: true,
+				denyTools: [],
+				noContextFiles: false,
+				noSession: false,
+				agentConfigDir: dir,
+				cwd: dir,
+				boundarySystemPrompt: false,
+				taskExpansion: "shell",
+			});
+
+			await resumeSubagentSession(
+				{ sessionFile, task: "Background marker: !`printf background-marker`" },
+				{
+					isMuxAvailable: () => true,
+					getShellReadyDelayMs: () => 0,
+					waitForInteractivePrompt: async () => {},
+					watchBackgroundSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+					watchSubagent: async () => ({ name: "", task: "", summary: "", exitCode: 0, elapsed: 0 }),
+					getWatcherSignal: (_running: any, controller: AbortController) => controller.signal,
+					startWidgetRefresh: () => {},
+					getContextWindow: () => undefined,
+					runningSubagents: new Map<string, any>(),
+				},
+			);
+
+			const stdin = await readNonEmptyFileEventually(stdinLog);
+			assert.match(stdin, /Background marker: background-marker/);
+			assert.doesNotMatch(stdin, /!`printf background-marker`/);
+		} finally {
+			if (originalCommand == null) delete process.env.PI_SUBAGENT_PI_COMMAND;
+			else process.env.PI_SUBAGENT_PI_COMMAND = originalCommand;
+		}
 	});
 
 	it("passes follow-up task as an @artifact startup prompt instead of typing into the pane", async () => {
