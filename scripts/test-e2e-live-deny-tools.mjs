@@ -203,7 +203,7 @@ try {
 
   const childEvents = parseJsonl(details.sessionFile);
   const childHeader = childEvents.find((event) => event.type === "session");
-  if (childHeader?.name !== "[live-e2e-deny agent] Live deny tools check") {
+  if (childHeader?.name !== "[live-e2e-deny] Live deny tools check") {
     throw new Error(`Expected native child session name, got ${childHeader?.name ?? "missing"}.`);
   }
   if (!getAssistantTexts(childEvents).some((text) => text.includes("LIVE_DENY_CHILD_OK"))) {
