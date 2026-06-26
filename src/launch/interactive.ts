@@ -170,7 +170,11 @@ export async function launchInteractiveSubagent(
 	const sentinelPath = shellEscape(doneSentinelFile);
 	const exitVar = exitStatusVar();
 	const exitTrap = shellEscape(`printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}`);
-	const command = `trap ${exitTrap} EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}`;
+	// Also write sentinel inline after pi exits — trap EXIT only fires when the shell itself
+	// exits, not when pi (a subprocess) exits inside an interactive shell. Without this,
+	// a crashed subagent leaves the poll loop spinning forever with no steer message sent.
+	const directSentinel = `printf '__SUBAGENT_DONE_%s__\\n' "${exitVar}" | tee ${sentinelPath} > /dev/null 2>&1`;
+	const command = `trap ${exitTrap} EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}; ${directSentinel}`;
 	traceSubagentLaunch("interactive.send", {
 		id,
 		name: params.name,
