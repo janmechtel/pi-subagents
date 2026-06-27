@@ -8,6 +8,10 @@ Use it when one agent should hand work to another agent instead of trying to do 
 
 https://github.com/user-attachments/assets/e0b97493-6c9b-4710-ba26-a6c08230ba28
 
+## Acknowledgements
+
+Special thanks to [@FasalZein](https://github.com/FasalZein) and [@isthatyousaf](https://github.com/isthatyousaf) — for their contributions, ideas, and for providing access to frontier models like GPT and Claude, which made it possible to experiment and build this extension. Good guys, I owe them a lot!
+
 ## 🌐 **Join the Community**
 
 > [!NOTE]

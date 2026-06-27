@@ -22,7 +22,6 @@ import {
 } from "./policy.ts";
 import {
 	createSurface,
-	exitStatusVar,
 	sendShellCommand,
 	shellEscape,
 } from "../mux.ts";
@@ -35,6 +34,7 @@ import {
 import { coordinateSubagentLaunch } from "./launch-coordinator.ts";
 import { writeSystemPromptArtifact, writeTaskArtifact } from "./prompt-artifacts.ts";
 import { expandSubagentTask } from "./task-expansion.ts";
+import { buildInteractiveSentinelShellCommands } from "./interactive-sentinel.ts";
 import { traceSubagentLaunch } from "./trace.ts";
 import {
 	getSubagentDisplayTitle,
@@ -167,14 +167,8 @@ export async function launchInteractiveSubagent(
 		: "";
 	const { launchEntryCount } = launch;
 	clearSubagentExitSidecar(prepared.subagentSessionFile);
-	const sentinelPath = shellEscape(doneSentinelFile);
-	const exitVar = exitStatusVar();
-	const exitTrap = shellEscape(`printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}`);
-	// Also write sentinel inline after pi exits — trap EXIT only fires when the shell itself
-	// exits, not when pi (a subprocess) exits inside an interactive shell. Without this,
-	// a crashed subagent leaves the poll loop spinning forever with no steer message sent.
-	const directSentinel = `printf '__SUBAGENT_DONE_%s__\\n' "${exitVar}" | tee ${sentinelPath} > /dev/null 2>&1`;
-	const command = `trap ${exitTrap} EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}; ${directSentinel}`;
+	const sentinel = buildInteractiveSentinelShellCommands(doneSentinelFile);
+	const command = `trap ${shellEscape(sentinel.exitTrap)} EXIT; ${cdPrefix}${envPrefix}${parts.join(" ")}; ${sentinel.direct}`;
 	traceSubagentLaunch("interactive.send", {
 		id,
 		name: params.name,
