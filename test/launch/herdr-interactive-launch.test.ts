@@ -1,3 +1,5 @@
+import { spawn, spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import {
 	ASSISTANT_MSG,
 	MODEL_CHANGE,
@@ -131,13 +133,95 @@ function extractTaskArtifactPath(commandText: string): string {
 	return match[1];
 }
 
-function readHerdrRunScript(log: string): string {
+function extractHerdrRunScriptPath(log: string): string {
 	const match = log.match(/pane run w1:p2 '([^']+)'/);
 	if (!match?.[1]) throw new Error("Expected Herdr launch command to run a staged shell script");
-	return readFileSync(match[1], "utf8");
+	return match[1];
+}
+
+function readHerdrRunScript(log: string): string {
+	return readFileSync(extractHerdrRunScriptPath(log), "utf8");
 }
 
 describe("Herdr interactive launch parity", () => {
+	it("records child exit status through a direct sentinel before staged Herdr scripts exit", async () => {
+		const originalPath = process.env.PATH;
+		const { dir, logFile } = useFakeHerdr();
+		const originalPiCommand = process.env.PI_SUBAGENT_PI_COMMAND;
+		const originalShell = process.env.SHELL;
+		process.env.PATH = `${dir}:${originalPath ?? ""}`;
+		process.env.SHELL = "/bin/sh";
+		try {
+			const cwd = createTestDir();
+			process.env.PI_ARTIFACT_PROJECT_ROOT = join(cwd, "artifacts");
+			mkdirSync(join(cwd, ".pi", "agents"), { recursive: true });
+			writeFileSync(
+				join(cwd, ".pi", "agents", "sentinel-child.md"),
+				[
+					"---",
+					"name: sentinel-child",
+					"auto-exit: true",
+					"---",
+					"Exit immediately for sentinel verification.",
+				].join("\n"),
+			);
+			const fakePi = writeExecutable(dir, "fake-pi", "#!/bin/sh\nexit 42\n");
+			process.env.PI_SUBAGENT_PI_COMMAND = fakePi;
+			const parentSession = writeParentSession(cwd);
+
+			const running = await launchInteractiveSubagent(
+				{
+					name: "sentinel-launch-child",
+					title: "Sentinel launch child",
+					task: "Check staged sentinel status.",
+					agent: "sentinel-child",
+				},
+				{
+					cwd,
+					sessionManager: {
+						getSessionFile: () => parentSession,
+						getSessionId: () => "parent-session-id",
+						getLeafId: () => "asst-001",
+					},
+				},
+				{
+					getContextWindow: () => undefined,
+					getShellReadyDelayMs: () => 0,
+					waitForInteractivePrompt: async () => {},
+				},
+			);
+
+			const log = readFileSync(logFile, "utf8");
+			const launchScriptPath = extractHerdrRunScriptPath(log);
+			const launchScript = readFileSync(launchScriptPath, "utf8");
+			const command = launchScript.split("\n").slice(1).join("\n").trim();
+
+			const shell = spawn("/bin/sh", [], { stdio: ["pipe", "ignore", "ignore"] });
+			try {
+				shell.stdin.write(`${command}\n`);
+				const sentinel = await readEventually(
+					running.doneSentinelFile!,
+					(text) => /__SUBAGENT_DONE_42__/.test(text),
+				);
+				assert.match(sentinel, /__SUBAGENT_DONE_42__/);
+			} finally {
+				shell.stdin.end("exit\n");
+			}
+
+			rmSync(running.doneSentinelFile!, { force: true });
+			const result = spawnSync(launchScriptPath, { encoding: "utf8" });
+			assert.equal(result.error, undefined);
+			assert.match(readFileSync(running.doneSentinelFile!, "utf8"), /__SUBAGENT_DONE_42__/);
+		} finally {
+			if (originalPiCommand === undefined) delete process.env.PI_SUBAGENT_PI_COMMAND;
+			else process.env.PI_SUBAGENT_PI_COMMAND = originalPiCommand;
+			if (originalShell === undefined) delete process.env.SHELL;
+			else process.env.SHELL = originalShell;
+			if (originalPath === undefined) delete process.env.PATH;
+			else process.env.PATH = originalPath;
+		}
+	});
+
 	it("launches interactive Herdr children with resolved cwd, session, approval, and surface facts", async () => {
 		const { logFile } = useFakeHerdr();
 		const cwd = createTestDir();

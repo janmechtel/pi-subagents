@@ -6,6 +6,7 @@ import { getArtifactStorageRoot } from "../artifact-storage.ts";
 import { getPiInvocation, getPiShellParts, getSubagentChildProcessEnv } from "../launch/child-command.ts";
 import { writeResumeTaskArtifact } from "../launch/prompt-artifacts.ts";
 import { expandSubagentTask } from "../launch/task-expansion.ts";
+import { buildInteractiveSentinelShellCommands } from "../launch/interactive-sentinel.ts";
 import { parseEnvString } from "../launch/env.ts";
 import { assertModelAllowed, buildModelRef } from "../agents/model-refs.ts";
 import {
@@ -21,7 +22,7 @@ import {
 	getResumeCwd,
 	resolveResumeLaunchMetadata,
 } from "../launch/resume.ts";
-import { createSurface, exitStatusVar, muxSetupHint, sendShellCommand, shellEscape } from "../mux.ts";
+import { createSurface, muxSetupHint, sendShellCommand, shellEscape } from "../mux.ts";
 import { clearSubagentExitSidecar } from "../session/exit-sidecar.ts";
 import { getEntryCount } from "../session/session.ts";
 import {
@@ -329,10 +330,8 @@ export async function resumeSubagentSession(
 		const resumeEnvPrefix = `${Object.entries(resumeEnvVars)
 			.map(([key, value]) => `${key}=${shellEscape(value)}`)
 			.join(" ")} `;
-		const sentinelPath = shellEscape(doneSentinelFile);
-		const exitVar = exitStatusVar();
-		const exitTrap = shellEscape(`printf "__SUBAGENT_DONE_${exitVar}__\\n" | tee ${sentinelPath}`);
-		const command = `trap ${exitTrap} EXIT; ${buildShellChangeDirectoryPrefix(resumeCwd)}${resumeEnvPrefix}${parts.join(" ")}`;
+		const sentinel = buildInteractiveSentinelShellCommands(doneSentinelFile);
+		const command = `trap ${shellEscape(sentinel.exitTrap)} EXIT; ${buildShellChangeDirectoryPrefix(resumeCwd)}${resumeEnvPrefix}${parts.join(" ")}; ${sentinel.direct}`;
 		sendShellCommand(surface, command);
 		running.surface = surface;
 		running.doneSentinelFile = doneSentinelFile;
